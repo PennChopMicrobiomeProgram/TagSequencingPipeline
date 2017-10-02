@@ -2,7 +2,7 @@
 
 if [ $# -ne 4 ]; then
 	echo "Usage: $0 WORK_DIR MAPPING_FP LANE_NUM PROJECT_NAME"
-	exit 1 
+	exit 1
 fi
 
 WORK_DIR=$1
@@ -56,15 +56,15 @@ qiime demux emp-paired \
   --m-barcodes-category BarcodeSequence \
   --i-seqs $PROJECT_DIR"/emp-paired-end-sequences.qza" \
   --o-per-sample-sequences $PROJECT_DIR"/demux" \
-  --p-rev-comp-mapping-barcodes 
+  --p-rev-comp-mapping-barcodes
 
 qiime demux summarize \
   --i-data $PROJECT_DIR"/demux.qza" \
-  --o-visualization $PROJECT_DIR"/demux.qzv" 
+  --o-visualization $PROJECT_DIR"/demux.qzv"
 
 qiime tools export \
   $PROJECT_DIR"/demux.qzv" \
-  --output-dir $PROJECT_DIR"/demux"  
+  --output-dir $PROJECT_DIR"/demux"
 
 ###=====================
 ###  SEQUENCE QC AND FEATURE TABLE
@@ -83,7 +83,7 @@ qiime dada2 denoise-paired \
 qiime feature-table summarize \
   --i-table $PROJECT_DIR"/table.qza" \
   --o-visualization $PROJECT_DIR"/table.qzv" \
-  --m-sample-metadata-file $MAPPING_FP 
+  --m-sample-metadata-file $MAPPING_FP
 
 qiime feature-table tabulate-seqs \
   --i-data $PROJECT_DIR"/rep-seqs.qza" \
@@ -172,9 +172,3 @@ biom convert \
   -m $MAPPING_FP \
   --header-key=taxonomy \
   --process-obs-metadata=taxonomy
-
-
-
-
-
-
