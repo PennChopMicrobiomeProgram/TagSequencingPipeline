@@ -1,0 +1,320 @@
+---
+title: "Basic Bioinformatics Overview"
+author: "PennCHOP Microbiome Program"
+date: \today
+output: 
+    pdf_document:
+        keep_tex: true
+        includes:
+            in_header: TeX_packages_commands.sty
+---
+
+<!-- ================================================================================================ -->
+<!--   Beginning of Preamble : Preamble seldom requires change                                        -->
+<!-- ================================================================================================ -->
+
+<!-- knitr setup -->
+```{r knitr setup, echo=FALSE}
+### ================
+###   knitr setup
+### ================
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=FALSE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  dpi=100,
+  fig.width=8,
+  fig.height=8,
+  fig.align = "center"
+  )
+```
+
+<!-- R packages -->
+```{r R packages, message=FALSE}
+### ================
+###   R packages
+### ================
+library(plyr)
+library(dplyr)
+library(qiimer)
+library(pander)
+library(ape)
+library(vegan)
+library(ggplot2)
+library(tidyr)
+library(broom)
+library(reshape2)
+library(kylemisc)
+library(gtools) 
+```
+
+<!-- resources -->
+```{r resources}
+### ================
+###   R resources
+### ================
+source("R_functions.R")
+```
+
+<!-- user defined functions -->
+```{r user defined functions}
+### ================
+###   User defined functions, if any
+### ================
+```
+
+<!-- ================================================================================================ -->
+<!--   End of Preamble                                                                                -->
+<!-- ================================================================================================ -->
+
+
+<!-- ================================================================================================ -->
+<!--   Beginning of Project Specific Items                                                            -->
+<!-- ================================================================================================ -->
+
+```{r}
+### ===========================
+###   define constants
+### ===========================
+
+### run date
+run_date <- "September 7th, 2017"
+
+### investigator
+investigator <- "Lehn Weaver"
+
+### data files directory
+data_files_dir <- "data_files"
+
+### porject directory
+proj_dir <- "16s"
+
+### mapping file
+mapping_file_fp <- file.path(data_files_dir, "20170907_weaver_mapping_file.txt")
+
+### per-sample read count 
+read_count_fp <- file.path(proj_dir, "table", "sample-frequency-detail.csv")
+
+### otu table
+feature_table_fp <- file.path(proj_dir, "table", "feature-table.tsv")
+
+### taxonomic assignment 
+taxo_assignment_fp <- file.path(proj_dir, "taxonomy", "taxonomy.tsv")
+
+### unweighted UniFrac
+uu_fp <- file.path(proj_dir, "core-metrics-results", "uu", "distance-matrix.tsv")
+
+### weighted UniFrac
+wu_fp <- file.path(proj_dir, "core-metrics-results", "wu", "distance-matrix.tsv")
+
+### num of observed otu
+notu_fp <- file.path(proj_dir, "core-metrics-results", "observed_otu", "alpha-diversity.tsv")
+
+### shannon
+shannon_fp <- file.path(proj_dir, "core-metrics-results", "shannon", "alpha-diversity.tsv")
+
+### minimum reads threshold
+min_reads <- 1000
+```
+
+
+```{r}
+### ===========================
+###   read in data
+### ===========================
+
+### read mapping file
+s <- read_qiime_mapping_file(mapping_file_fp) 
+
+### Check if the sample names start with a number. If they do, add an "X" to the front
+toFix = grepl("^[0-9]", s$SampleID)
+s$SampleIDorig = s$SampleID
+s$SampleID[toFix] = paste0('X', s$SampleID[toFix])
+
+### read otu table
+o <- read.table(feature_table_fp, skip=1, header=T, as.is=T, sep="\t", comment.char="", fill=T)
+rownames(o) <- o$X.OTU.ID
+counts <- o %>%
+  select(-X.OTU.ID, -taxonomy)
+
+### taxonomic assignment
+ta <- read.table(file=taxo_assignment_fp, header=T, sep="\t", as.is=T)
+ta$trunc_taxon <- sub("(; [kpcofgs]__)+$", "", ta$Taxon, perl=T)
+rownames(ta) <- ta$Feature.ID
+ta <- ta[rownames(o), c("trunc_taxon", "Confidence")]
+md <- ta$trunc_taxon
+names(md) <- rownames(ta)
+adf <- split_assignments(md) 
+
+### remove contamination
+is_mitochondrial <- grepl("mitochondria", adf$Family)
+is_chloroplast <- grepl("Chloroplast", adf$Class)
+is_unassigned <- grepl("Unassigned", adf$Kingdom)
+is_archaea <- grepl("Archaea", adf$Kingdom)
+is_contam <- is_mitochondrial | is_chloroplast | is_unassigned
+counts <- counts[!is_contam,]
+adf <- adf[!is_contam,]
+rm(is_contam, is_mitochondrial, is_chloroplast, is_unassigned, is_archaea)
+
+### read counts
+read_counts <- read.table(file=read_count_fp, header=F, as.is=T, sep=",") %>%
+  rename(SampleID=V1) %>%
+  rename(Read_Counts=V2)
+s <- merge(s, read_counts, by="SampleID", all.x=T)
+
+### number of observed OTUs
+notu <- read.table(file=notu_fp, header=T, sep="\t", as.is=T) %>%
+  rename(SampleID=X)
+s <- merge(s, notu, by="SampleID", all.x=T)
+
+### Shannon measure
+shannon <- read.table(file=shannon_fp, header=T, sep="\t", as.is=T) %>%
+  rename(SampleID=X)
+s <- merge(s, shannon, by="SampleID", all.x=T)
+```
+
+```{r}
+### ===========================
+###   data preprocessing and etc
+### ===========================
+
+### possible issue 1: any mismatch between s$SampleID and colames(counts)?
+#in_s_not_in_counts <- setdiff(s$SampleID, colnames(counts))
+#if (length(in_s_not_in_counts) > 0) stop (simpleError("These SampleID(s) are in the mapping file, but not found in the feature table.", paste(in_s_not_in_counts, collapse=" ")))
+#in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
+#if (length(in_counts_not_in_s) > 0) stop (simpleError("These SampleID(s) are in the feature table, but not found in the mapping file.", paste(in_counts_not_in_s, collapse=" ")))
+common_sample_list <- intersect(s$SampleID, colnames(counts))
+s <- s[s$SampleID %in% common_sample_list, ]
+counts <- counts[, common_sample_list]
+
+### possible issue 2: keep only samples that are related with the investigator
+s <- s[s$investigator=="Weaver", ]
+counts <- counts[, s$SampleID]
+
+### study_group includes NA meaning Neomycin and Ampicillin combination
+s$study_groupORIG <- s$study_group
+s$study_group <- as.character(s$study_group)
+s$study_group[grepl(".NA.PostABX", s$SampleID, fixed=T)] <- "NA"
+
+### study_group for control samples
+s$study_group[grep("geneblock|freewater", s$SampleID, ignore.case = TRUE)] <- "Control Samples"
+
+### extra grouping provided by Lehn
+susceptible_list <- c("SucroseCpG", "SucrosePBS", "M", "N", "A", "V", "MN", "MA", "NA", "VNA")
+protected_list <- c("VMAN", "MAN", "VMN", "VMA", "VM", "VA", "VN")
+s$grouping[s$study_group %in% susceptible_list] <- "susceptible"
+s$grouping[s$study_group %in% protected_list] <- "protected"
+```
+
+# Introduction
+This report is based on the results of sequencing performed on `r run_date` for `r investigator`. 
+
+# Histogram of high quality paired reads per sample
+The \red{red vertical line} shows the minimum number of reads (`r min_reads`) for analysis. Control samples, if any, were included in the histogram.
+
+```{r, fig.width=4, fig.height=4}
+ggplot(s, aes(x=Read_Counts)) +
+    geom_histogram(binwidth=10000) +
+    geom_vline(xintercept = min_reads, color="red") +
+    theme_classic() +
+    theme_bw() + 
+    xlab("Number of reads in sample") +
+    ylab("Number of samples")
+```
+
+\newpage
+
+# Whole samples that are above the `r min_reads` read count threshold
+
+```{r}
+### Whole samples discarded that are below the read count threshold of min_reads
+s$Keep <- s$Read_Counts > min_reads
+s$KeepLabel <- factor(ifelse(s$Keep, "Keep", "Discard"))
+keep_table <- table(s[,"study_group"], s$KeepLabel)
+pander(keep_table)
+```
+
+\newpage
+
+# Taxonomic heatmap
+
+```{r}
+prop_cut <- 0.01
+satu_limit <- 0.4
+```
+
+The heatmap was generated from the most specific taxonomic assignments. Each column represents one sample and each row represents one taxon. Taxa were included in the chart if the abundance in any sample exceeded `r 100*prop_cut`%. 
+
+The chart is colored white if taxa were not observed in the sample, dark blue if taxa were observed at very low abundance. This allows the reader to quickly survey presence/absence. Abundance values exceeding `r 100*satu_limit`% are colored red, indicating an extremely dominant species.
+
+```{r, fig.height=12, fig.width=16}
+s_toPlot <- s[s$Keep,] %>%
+  mutate(study_group=as.character(study_group))
+cts_toPlot <- counts[, s_toPlot$SampleID]  
+a <- simplify_assignments(adf, rank1="Phylum", rank2="Species")
+summed_cts <- rowsum(cts_toPlot, a) 
+summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/") 
+grps <- c("grouping", "study_group")
+
+### heatmap with a gap
+heatmap_grouped(summed_props, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
+```
+
+\newpage 
+
+# Beta diversity measures
+
+Similarity between samples was assessed by unweighted and weighted UniFrac distances. 
+
+## Unweighted UniFrac distances
+
+The unweighted UniFrac distance was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+
+```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
+dist_type <- "uu" ## unweighted
+if (dist_type=="uu") {
+  dist_fp <- uu_fp
+  pcoa_title <- "PCoA plot based on Unweighted UniFrac distances"
+} else if (dist_type=="wu") {
+  dist_fp <- wu_fp
+  pcoa_title <- "PCoA plot based on Weighted UniFrac distances"
+}
+
+s_toPlot <- s[s$Read_Counts > min_reads, ]
+s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|control", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
+
+dist_in <- read_qiime_distmat(dist_fp)
+dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
+pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by="grouping", shape_by=NULL, title = pcoa_title)
+plot(pcoa_plot)
+```
+
+\newpage
+
+## Weighted UniFrac distances
+
+The weighted UniFrac distance was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+
+```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
+dist_type <- "wu" ## unweighted
+if (dist_type=="uu") {
+  dist_fp <- uu_fp
+  pcoa_title <- "PCoA plot based on Unweighted UniFrac distances"
+} else if (dist_type=="wu") {
+  dist_fp <- wu_fp
+  pcoa_title <- "PCoA plot based on Weighted UniFrac distances"
+}
+
+s_toPlot <- s[s$Read_Counts > min_reads, ]
+s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|control", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
+
+dist_in <- read_qiime_distmat(dist_fp)
+dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
+pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by="grouping", shape_by=NULL, title = pcoa_title)
+plot(pcoa_plot)
+```
+
+
