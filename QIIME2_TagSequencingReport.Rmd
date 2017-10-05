@@ -81,10 +81,10 @@ source("R_functions.R")
 ### ===========================
 
 ### run date
-run_date <- "September 7th, 2017"
+run_date <- "October 3rd, 2017"
 
 ### investigator
-investigator <- "Lehn Weaver"
+investigator <- "Mark Brown"
 
 ### data files directory
 data_files_dir <- "data_files"
@@ -93,7 +93,7 @@ data_files_dir <- "data_files"
 proj_dir <- "16s"
 
 ### mapping file
-mapping_file_fp <- file.path(data_files_dir, "20170907_weaver_mapping_file.txt")
+mapping_file_fp <- file.path(data_files_dir, "20171003_brown_mapping_file.txt")
 
 ### per-sample read count 
 read_count_fp <- file.path(proj_dir, "table", "sample-frequency-detail.csv")
@@ -161,18 +161,18 @@ rm(is_contam, is_mitochondrial, is_chloroplast, is_unassigned, is_archaea)
 
 ### read counts
 read_counts <- read.table(file=read_count_fp, header=F, as.is=T, sep=",") %>%
-  rename(SampleID=V1) %>%
-  rename(Read_Counts=V2)
+  dplyr::rename(SampleID=V1) %>%
+  dplyr::rename(Read_Counts=V2)
 s <- merge(s, read_counts, by="SampleID", all.x=T)
 
 ### number of observed OTUs
 notu <- read.table(file=notu_fp, header=T, sep="\t", as.is=T) %>%
-  rename(SampleID=X)
+  dplyr::rename(SampleID=X)
 s <- merge(s, notu, by="SampleID", all.x=T)
 
 ### Shannon measure
 shannon <- read.table(file=shannon_fp, header=T, sep="\t", as.is=T) %>%
-  rename(SampleID=X)
+  dplyr::rename(SampleID=X)
 s <- merge(s, shannon, by="SampleID", all.x=T)
 ```
 
@@ -191,26 +191,17 @@ s <- s[s$SampleID %in% common_sample_list, ]
 counts <- counts[, common_sample_list]
 
 ### possible issue 2: keep only samples that are related with the investigator
-s <- s[s$investigator=="Weaver", ]
+s <- s[s$investigator=="Mark Brown", ]
 counts <- counts[, s$SampleID]
 
-### study_group includes NA meaning Neomycin and Ampicillin combination
-s$study_groupORIG <- s$study_group
-s$study_group <- as.character(s$study_group)
-s$study_group[grepl(".NA.PostABX", s$SampleID, fixed=T)] <- "NA"
-
-### study_group for control samples
-s$study_group[grep("geneblock|freewater", s$SampleID, ignore.case = TRUE)] <- "Control Samples"
-
-### extra grouping provided by Lehn
-susceptible_list <- c("SucroseCpG", "SucrosePBS", "M", "N", "A", "V", "MN", "MA", "NA", "VNA")
-protected_list <- c("VMAN", "MAN", "VMN", "VMA", "VM", "VA", "VN")
-s$grouping[s$study_group %in% susceptible_list] <- "susceptible"
-s$grouping[s$study_group %in% protected_list] <- "protected"
+### misc data preprocessing
+color_by <- "time_collected"
+shape_by <- "cage_number"
+s$cage_number <- as.factor(s$cage_number)
 ```
 
 # Introduction
-This report is based on the results of sequencing performed on `r run_date` for `r investigator`. 
+This report is based on the results of sequencing performed on `r run_date` for `r investigator` Project. 
 
 # Histogram of high quality paired reads per sample
 The \red{red vertical line} shows the minimum number of reads (`r min_reads`) for analysis. Control samples, if any, were included in the histogram.
@@ -233,7 +224,7 @@ ggplot(s, aes(x=Read_Counts)) +
 ### Whole samples discarded that are below the read count threshold of min_reads
 s$Keep <- s$Read_Counts > min_reads
 s$KeepLabel <- factor(ifelse(s$Keep, "Keep", "Discard"))
-keep_table <- table(s[,"study_group"], s$KeepLabel)
+keep_table <- table(s[, color_by], s$KeepLabel)
 pander(keep_table)
 ```
 
@@ -257,7 +248,7 @@ cts_toPlot <- counts[, s_toPlot$SampleID]
 a <- simplify_assignments(adf, rank1="Phylum", rank2="Species")
 summed_cts <- rowsum(cts_toPlot, a) 
 summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/") 
-grps <- c("grouping", "study_group")
+grps <- c(color_by, shape_by)
 
 ### heatmap with a gap
 heatmap_grouped(summed_props, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
@@ -265,56 +256,86 @@ heatmap_grouped(summed_props, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut
 
 \newpage 
 
-# Beta diversity measures
+# Beta diversity
 
 Similarity between samples was assessed by unweighted and weighted UniFrac distances. 
 
 ## Unweighted UniFrac distances
 
-The unweighted UniFrac distance was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
-
-```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
-dist_type <- "uu" ## unweighted
+```{r}
+dist_type <- "uu" ## unweighted or weighted
 if (dist_type=="uu") {
   dist_fp <- uu_fp
-  pcoa_title <- "PCoA plot based on Unweighted UniFrac distances"
+  dist_name <- "unweighted UniFrac distances"
 } else if (dist_type=="wu") {
   dist_fp <- wu_fp
-  pcoa_title <- "PCoA plot based on Weighted UniFrac distances"
+  dist_name <- "weighted UniFrac distances"
 }
+```
 
+The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+
+### PCoA plot
+
+```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
 s_toPlot <- s[s$Read_Counts > min_reads, ]
 s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|control", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
 
 dist_in <- read_qiime_distmat(dist_fp)
 dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
-pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by="grouping", shape_by=NULL, title = pcoa_title)
+pcoa_title <- paste0("PCoA plot based on ", dist_name)
+pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by=color_by, shape_by=NULL, title = pcoa_title)
 plot(pcoa_plot)
+```
+
+\newpage
+
+### UPGMA clustering 
+
+The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
+
+```{r, fig.width=12, fig.height=5, echo=FALSE}
+hc = hclust(dist_in, method="average")
+plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
 ```
 
 \newpage
 
 ## Weighted UniFrac distances
 
-The weighted UniFrac distance was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
-
-```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
-dist_type <- "wu" ## unweighted
+```{r}
+dist_type <- "wu" ## unweighted or weighted
 if (dist_type=="uu") {
   dist_fp <- uu_fp
-  pcoa_title <- "PCoA plot based on Unweighted UniFrac distances"
+  dist_name <- "unweighted UniFrac distances"
 } else if (dist_type=="wu") {
   dist_fp <- wu_fp
-  pcoa_title <- "PCoA plot based on Weighted UniFrac distances"
+  dist_name <- "weighted UniFrac distances"
 }
+```
 
+The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+
+### PCoA plot
+
+```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
 s_toPlot <- s[s$Read_Counts > min_reads, ]
 s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|control", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
 
 dist_in <- read_qiime_distmat(dist_fp)
 dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
-pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by="grouping", shape_by=NULL, title = pcoa_title)
+pcoa_title <- paste0("PCoA plot based on ", dist_name)
+pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by=color_by, shape_by=NULL, title = pcoa_title)
 plot(pcoa_plot)
 ```
 
+\newpage
 
+### UPGMA clustering 
+
+The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
+
+```{r, fig.width=12, fig.height=5, echo=FALSE}
+hc = hclust(dist_in, method="average")
+plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
+```
