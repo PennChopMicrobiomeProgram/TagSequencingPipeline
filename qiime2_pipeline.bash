@@ -23,7 +23,7 @@ fi
 
 FWD=$DATA_DIR"/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_R1_001.fastq.gz"
 REV=$DATA_DIR"/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_R2_001.fastq.gz"
-IDX=$DATA_DIR"/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_I1_001.fastq.gz"
+IDX=$DATA_DIR"/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_I12_001.fastq.gz"
 
 ###=====================
 ### Maybe need a step to check mapping file using Keemei?
@@ -159,7 +159,6 @@ qiime tools export \
 qiime tools export \
   $PROJECT_DIR"/core-metrics-results/weighted_unifrac_distance_matrix.qza" \
   --output-dir $PROJECT_DIR"/core-metrics-results/wu"
-
 
 ###=====================
 ###  BIOM CONVERT
