@@ -31,18 +31,6 @@ DEMUX_DIR="${WORK_DIR}/demux-results"
 DENOISE_DIR="${WORK_DIR}/denoising-results"
 METRIC_DIR="${WORK_DIR}/core-metric-results"
 
-if [ ! -d ${EMP_PAIRED_END_SEQUENCES_DIR} ]; then
-        mkdir ${EMP_PAIRED_END_SEQUENCES_DIR}
-fi
-
-if [ ! -d ${DEMUX_DIR} ]; then
-        mkdir ${DEMUX_DIR}
-fi
-
-if [ ! -d ${DENOISE_DIR} ]; then
-        mkdir ${DENOISE_DIR}
-fi
-
 ###=====================
 ### gunzip INDEX1 AND INDEX2, IF NECESSARY
 ###=====================
@@ -82,6 +70,9 @@ IDX="${DATA_DIR}/Undetermined_S0_L001_I12_001.fastq.gz"
 ### DATA IMPORT
 ###=====================
 
+if [ ! -d ${EMP_PAIRED_END_SEQUENCES_DIR} ]; then
+        mkdir ${EMP_PAIRED_END_SEQUENCES_DIR}
+fi
 
 if [ ! -e "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz" ]; then
     mv ${FWD} "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz"
@@ -97,6 +88,10 @@ qiime tools import \
 ###=====================
 ### DEMULTIPLEXING SEQUENCE
 ###=====================
+
+if [ ! -d ${DEMUX_DIR} ]; then
+        mkdir ${DEMUX_DIR}
+fi
 
 qiime demux emp-paired \
   --m-barcodes-file ${MAPPING_FP} \
@@ -116,6 +111,10 @@ qiime tools export \
 ###=====================
 ###  SEQUENCE QC AND FEATURE TABLE
 ###=====================
+
+if [ ! -d ${DENOISE_DIR} ]; then
+        mkdir ${DENOISE_DIR}
+fi
 
 ## discussion needed for denosing parameters below
 
@@ -187,24 +186,39 @@ qiime phylogeny midpoint-root \
 ###  ALPHA AND BETA DIVERSITY
 ###=====================
 
-qiime diversity core-metrics-phylogenetic \
+if [ ! -d ${METRIC_DIR} ]; then
+        mkdir ${METRIC_DIR}
+fi
+
+qiime diversity alpha-phylogenetic \
   --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
   --i-table "${DENOISE_DIR}/table.qza" \
-  --p-sampling-depth 10 \
-  --m-metadata-file ${MAPPING_FP} \
-  --output-dir "${METRIC_DIR}"
+  --p-metric faith_pd \
+  --o-alpha-diversity "${METRIC_DIR}/faith_pd_vector.qza"
 
 qiime tools export \
   "${METRIC_DIR}/faith_pd_vector.qza" \
   --output-dir "${METRIC_DIR}/faith"
 
-qiime tools export \
-  "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
-  --output-dir "${METRIC_DIR}/uu"
+qiime diversity beta-phylogenetic \
+  --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+  --i-table "${DENOISE_DIR}/table.qza" \
+  --p-metric weighted_unifrac \
+  --o-distance-matrix "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza"
 
 qiime tools export \
   "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
   --output-dir "${METRIC_DIR}/wu"
+
+qiime diversity beta-phylogenetic \
+  --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+  --i-table "${DENOISE_DIR}/table.qza" \
+  --p-metric unweighted_unifrac \
+  --o-distance-matrix "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza"
+
+qiime tools export \
+  "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
+  --output-dir "${METRIC_DIR}/uu"
 
 ###=====================
 ###  BIOM CONVERT
