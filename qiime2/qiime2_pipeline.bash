@@ -3,14 +3,13 @@ set -x
 set -e
 set -u
 
-if [ $# -ne 3 ]; then
-	echo "Usage: $0 WORK_DIR MAPPING_FP PROJECT_NAME"
+if [ $# -ne 2 ]; then
+	echo "Usage: $0 WORK_DIR MAPPING_FP"
 	exit 1
 fi
 
 WORK_DIR=$1
 MAPPING_FP=$2
-PROJECT_NAME=$3
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
@@ -19,18 +18,29 @@ PROJECT_NAME=$3
 
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
-CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
+CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
 
 INDEX1_INDEX2_COMBINE_SCRIPT="${HOME}/combine_barcodes.py"
 
+EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp-paired-end-sequences"
 DATA_DIR="${WORK_DIR}/data_files"
+DEMUX_DIR="${WORK_DIR}/demux-results"
+DENOISE_DIR="${WORK_DIR}/denoising-results"
+METRIC_DIR="${WORK_DIR}/core-metric-results"
 
-PROJECT_DIR="${WORK_DIR}/${PROJECT_NAME}"
-if [ ! -d ${PROJECT_DIR} ]; then
-	mkdir ${PROJECT_DIR}
+if [ ! -d ${EMP_PAIRED_END_SEQUENCES_DIR} ]; then
+        mkdir ${EMP_PAIRED_END_SEQUENCES_DIR}
+fi
+
+if [ ! -d ${DEMUX_DIR} ]; then
+        mkdir ${DEMUX_DIR}
+fi
+
+if [ ! -d ${DENOISE_DIR} ]; then
+        mkdir ${DENOISE_DIR}
 fi
 
 ###=====================
@@ -72,19 +82,17 @@ IDX="${DATA_DIR}/Undetermined_S0_L001_I12_001.fastq.gz"
 ### DATA IMPORT
 ###=====================
 
-EMP_PAIRED_END_SEQUENCES_DIR="${PROJECT_DIR}/emp-paired-end-sequences"
-if [ ! -d ${EMP_PAIRED_END_SEQUENCES_DIR} ]; then
-        mkdir ${EMP_PAIRED_END_SEQUENCES_DIR}
-fi
 
-mv ${FWD} "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz"
-mv ${REV} "${EMP_PAIRED_END_SEQUENCES_DIR}/reverse.fastq.gz"
-mv ${IDX} "${EMP_PAIRED_END_SEQUENCES_DIR}/barcodes.fastq.gz"
+if [ ! -e "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz" ]; then
+    mv ${FWD} "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz"
+    mv ${REV} "${EMP_PAIRED_END_SEQUENCES_DIR}/reverse.fastq.gz"
+    mv ${IDX} "${EMP_PAIRED_END_SEQUENCES_DIR}/barcodes.fastq.gz"
+fi
 
 qiime tools import \
   --type EMPPairedEndSequences \
   --input-path ${EMP_PAIRED_END_SEQUENCES_DIR} \
-  --output-path "${PROJECT_DIR}/emp-paired-end-sequences.qza"
+  --output-path "${WORK_DIR}/emp-paired-end-sequences.qza"
 
 ###=====================
 ### DEMULTIPLEXING SEQUENCE
@@ -93,17 +101,17 @@ qiime tools import \
 qiime demux emp-paired \
   --m-barcodes-file ${MAPPING_FP} \
   --m-barcodes-category BarcodeSequence \
-  --i-seqs "${PROJECT_DIR}/emp-paired-end-sequences.qza" \
-  ## --p-rev-comp-mapping-barcodes \ ## use if mapping file BarcodeSequence nees to be reverse complemented
-  --o-per-sample-sequences "${PROJECT_DIR}/demux.qza"
+  --i-seqs "${WORK_DIR}/emp-paired-end-sequences.qza" \
+  --p-rev-comp-mapping-barcodes \
+  --o-per-sample-sequences "${DEMUX_DIR}/demux.qza"
 
 qiime demux summarize \
-  --i-data "${PROJECT_DIR}/demux.qza" \
-  --o-visualization "${PROJECT_DIR}/demux.qzv"
+  --i-data "${DEMUX_DIR}/demux.qza" \
+  --o-visualization "${DEMUX_DIR}/demux.qzv"
 
 qiime tools export \
-  "${PROJECT_DIR}/demux.qzv" \
-  --output-dir "${PROJECT_DIR}/demux"
+  "${DEMUX_DIR}/demux.qzv" \
+  --output-dir "${DEMUX_DIR}/demux-qzv"
 
 ###=====================
 ###  SEQUENCE QC AND FEATURE TABLE
@@ -112,31 +120,31 @@ qiime tools export \
 ## discussion needed for denosing parameters below
 
 qiime dada2 denoise-paired \
-  --i-demultiplexed-seqs "${PROJECT_DIR}/demux.qza" \
+  --i-demultiplexed-seqs "${DEMUX_DIR}/demux.qza" \
   --p-trim-left-f 0 \
   --p-trunc-len-f 230 \
   --p-trim-left-r 0 \
   --p-trunc-len-r 230 \
   --p-n-threads 8 \
-  --o-representative-sequences "${PROJECT_DIR}/rep-seqs.qza" \
-  --o-table "${PROJECT_DIR}/table.qza"
+  --o-representative-sequences "${DENOISE_DIR}/rep-seqs.qza" \
+  --o-table "${DENOISE_DIR}/table.qza"
 
 qiime feature-table summarize \
-  --i-table "${PROJECT_DIR}/table.qza" \
-  --o-visualization "${PROJECT_DIR}/table.qzv" \
+  --i-table "${DENOISE_DIR}/table.qza" \
+  --o-visualization "${DENOISE_DIR}/table.qzv" \
   --m-sample-metadata-file ${MAPPING_FP}
 
 qiime feature-table tabulate-seqs \
-  --i-data "${PROJECT_DIR}/rep-seqs.qza" \
-  --o-visualization "${PROJECT_DIR}/rep-seqs.qzv"
+  --i-data "${DENOISE_DIR}/rep-seqs.qza" \
+  --o-visualization "${DENOISE_DIR}/rep-seqs.qzv"
 
 qiime tools export \
-  "${PROJECT_DIR}/table.qzv" \
-  --output-dir "${PROJECT_DIR}/table"
+  "${DENOISE_DIR}/table.qzv" \
+  --output-dir "${DENOISE_DIR}/table-qzv"
 
 qiime tools export \
-  "${PROJECT_DIR}/table.qza" \
-  --output-dir "${PROJECT_DIR}/table"
+  "${DENOISE_DIR}/table.qza" \
+  --output-dir "${DENOISE_DIR}/table-qza"
 
 ###=====================
 ###  TAXONOMIC ANALYSIS
@@ -144,65 +152,66 @@ qiime tools export \
 
 qiime feature-classifier classify-sklearn \
   --i-classifier ${CLASSIFIER_FP} \
-  --i-reads "${PROJECT_DIR}/rep-seqs.qza" \
-  --o-classification "${PROJECT_DIR}/taxonomy.qza"
+  --i-reads "${DENOISE_DIR}/rep-seqs.qza" \
+  --o-classification "${DENOISE_DIR}/taxonomy.qza"
 
 qiime metadata tabulate \
-  --m-input-file "${PROJECT_DIR}/taxonomy.qza" \
-  --o-visualization "${PROJECT_DIR}/taxonomy.qzv"
+  --m-input-file "${DENOISE_DIR}/taxonomy.qza" \
+  --o-visualization "${DENOISE_DIR}/taxonomy.qzv"
 
 qiime tools export \
-  "${PROJECT_DIR}/taxonomy.qza" \
-  --output-dir "${PROJECT_DIR}/taxonomy"
+  "${DENOISE_DIR}/taxonomy.qza" \
+  --output-dir "${DENOISE_DIR}/taxonomy-qza"
 
 ###=====================
 ###  GENERATE TREES
 ###=====================
 
 qiime alignment mafft \
-  --i-sequences "${PROJECT_DIR}/rep-seqs.qza" \
-  --o-alignment "${PROJECT_DIR}/aligned-rep-seqs.qza"
+  --i-sequences "${DENOISE_DIR}/rep-seqs.qza" \
+  --o-alignment "${DENOISE_DIR}/aligned-rep-seqs.qza"
 
 qiime alignment mask \
-  --i-alignment "${PROJECT_DIR}/aligned-rep-seqs.qza" \
-  --o-masked-alignment "${PROJECT_DIR}/masked-aligned-rep-seqs.qza"
+  --i-alignment "${DENOISE_DIR}/aligned-rep-seqs.qza" \
+  --o-masked-alignment "${DENOISE_DIR}/masked-aligned-rep-seqs.qza"
 
 qiime phylogeny fasttree \
-  --i-alignment "${PROJECT_DIR}/masked-aligned-rep-seqs.qza" \
-  --o-tree "${PROJECT_DIR}/unrooted-tree.qza"
+  --i-alignment "${DENOISE_DIR}/masked-aligned-rep-seqs.qza" \
+  --o-tree "${DENOISE_DIR}/unrooted-tree.qza"
 
 qiime phylogeny midpoint-root \
-  --i-tree "${PROJECT_DIR}/unrooted-tree.qza" \
-  --o-rooted-tree "${PROJECT_DIR}/rooted-tree.qza"
+  --i-tree "${DENOISE_DIR}/unrooted-tree.qza" \
+  --o-rooted-tree "${DENOISE_DIR}/rooted-tree.qza"
 
 ###=====================
 ###  ALPHA AND BETA DIVERSITY
 ###=====================
 
 qiime diversity core-metrics-phylogenetic \
-  --i-phylogeny "${PROJECT_DIR}/rooted-tree.qza" \
-  --i-table "${PROJECT_DIR}/table.qza" \
-  --p-sampling-depth 10000 \
+  --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+  --i-table "${DENOISE_DIR}/table.qza" \
+  --p-sampling-depth 10 \
   --m-metadata-file ${MAPPING_FP} \
-  --output-dir "${PROJECT_DIR}/core-metrics-results"
+  --output-dir "${METRIC_DIR}"
 
 qiime tools export \
-  "${PROJECT_DIR}/core-metrics-results/faith_pd_vector.qza" \
-  --output-dir "${PROJECT_DIR}/core-metrics-results/faith"
+  "${METRIC_DIR}/faith_pd_vector.qza" \
+  --output-dir "${METRIC_DIR}/faith"
 
 qiime tools export \
-  "${PROJECT_DIR}/core-metrics-results/unweighted_unifrac_distance_matrix.qza" \
-  --output-dir "${PROJECT_DIR}/core-metrics-results/uu"
+  "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
+  --output-dir "${METRIC_DIR}/uu"
 
 qiime tools export \
-  "${PROJECT_DIR}/core-metrics-results/weighted_unifrac_distance_matrix.qza" \
-  --output-dir "${PROJECT_DIR}/core-metrics-results/wu"
+  "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
+  --output-dir "${METRIC_DIR}/wu"
 
 ###=====================
 ###  BIOM CONVERT
 ###=====================
 
 biom convert \
-  -i "${PROJECT_DIR}/table/feature-table.biom" \
-  -o "${PROJECT_DIR}/table/feature-table.tsv" \
+  -i "${DENOISE_DIR}/table/feature-table.biom" \
+  -o "${DENOISE_DIR}/table/feature-table.tsv" \
   --to-tsv
+
