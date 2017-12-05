@@ -1,4 +1,7 @@
 #!/bin/bash
+set -x
+set -e
+set -u
 
 if [ $# -ne 3 ]; then
 	echo "Usage: $0 WORK_DIR MAPPING_FP PROJECT_NAME"
@@ -14,8 +17,10 @@ PROJECT_NAME=$3
 ## These can be downloaded from https://data.qiime2.org/2017.9/common/gg-13-8-99-nb-classifier.qza (full length)
 ## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
-CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
+#CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
+CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
+
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
 
