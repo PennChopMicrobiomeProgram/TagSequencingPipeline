@@ -179,19 +179,12 @@ qiime phylogeny midpoint-root \
 ###  ALPHA AND BETA DIVERSITY
 ###=====================
 
-qiime diversity core-metrics \
+qiime diversity core-metrics-phylogenetic \
   --i-phylogeny "${PROJECT_DIR}/rooted-tree.qza" \
   --i-table "${PROJECT_DIR}/table.qza" \
   --p-sampling-depth 10000 \
+  --m-metadata-file ${MAPPING_FP} \
   --output-dir "${PROJECT_DIR}/core-metrics-results"
-
-qiime tools export \
-  "${PROJECT_DIR}/core-metrics-results/observed_otus_vector.qza" \
-  --output-dir "${PROJECT_DIR}/core-metrics-results/observed_otu"
-
-qiime tools export \
-  "${PROJECT_DIR}/core-metrics-results/shannon_vector.qza" \
-  --output-dir "${PROJECT_DIR}/core-metrics-results/shannon"
 
 qiime tools export \
   "${PROJECT_DIR}/core-metrics-results/faith_pd_vector.qza" \
