@@ -12,8 +12,8 @@ MAPPING_FP=$1
 WORK_DIR="$(dirname ${MAPPING_FP})"
 
 SOURCE_REL="${BASH_SOURCE[0]}"
-SOURCE_ABS="$(readlink -f ${SOURCE_REL})"
-SOURCE_DIR="$( dirname ${SOURCE_ABS} )"
+SOURCE_ABS=$(readlink -f "${SOURCE_REL}")
+SOURCE_DIR=$(dirname "${SOURCE_ABS}")
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
 INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/../combine_barcodes.py"
