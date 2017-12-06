@@ -39,16 +39,19 @@ opts_chunk$set(
 ### ================
 library(plyr)
 library(dplyr)
+library(magrittr)
 library(qiimer)
 library(pander)
 library(ape)
 library(vegan)
 library(ggplot2)
+library(pheatmap)
 library(tidyr)
 library(broom)
 library(reshape2)
 library(kylemisc)
 library(gtools) 
+library(usedist)
 ```
 
 <!-- resources -->
@@ -56,7 +59,7 @@ library(gtools)
 ### ================
 ###   R resources
 ### ================
-source("R_functions.R")
+#source("R_functions.R")
 ```
 
 <!-- user defined functions -->
@@ -64,6 +67,78 @@ source("R_functions.R")
 ### ================
 ###   User defined functions, if any
 ### ================
+
+###=====
+###  thanks to Ceylan
+###  make_pcoa_plot <- function(uu, s, shape_by, color_by, title)
+###  uu: distance, s: mapping file, shape_by: variable used for shape, color_by: variable used for color
+###=====
+
+make_pcoa_plot <- function(dm, s, shape_by, color_by) {
+  dm <- usedist::dist_subset(dm, s$SampleID)
+  pc <- pcoa(dm)
+  pc_df <- merge(s, pc$vectors[, 1:3], by.x="SampleID", by.y="row.names")
+  pc_pct <- round(pc$values$Relative_eig * 100)
+  
+  pcoa_plot = ggplot(pc_df, aes(x=Axis.1, y=Axis.2)) +
+    theme_bw() +
+    scale_shape_discrete(name=sub("_", " ", shape_by)) + 
+    scale_colour_discrete(name=sub("_", " ", color_by)) +
+    labs(
+      x=paste0("PCoA axis 1 (", pc_pct[1], "%)"),
+      y=paste0("PCoA axis 2 (", pc_pct[2], "%)")
+    )
+  
+  if (is.null(shape_by) & !is.null(color_by)) {
+    pcoa_plot <- pcoa_plot + geom_point(aes(colour=factor(get(color_by))))
+  } else if (!is.null(shape_by) & !is.null(color_by)) {
+    pcoa_plot <- pcoa_plot + geom_point(aes(colour=factor(get(color_by)), shape=factor(get(shape_by))))
+  } else {
+    pcoa_plot <- pcoa_plot + geom_point()
+  }
+  return(pcoa_plot)
+}
+
+###=====
+###  thanks to Chunyu
+###  heatmap_grouped <- function(genus_props, heatmap_s, grps = c("study_group", "study_day"), fname=NULL, thre=0.8, option=1)
+###  option=1: rows_to_keep <- filter_low_coverage(heatmap_props, perc_cutoff=thre) ## taxa found in at least 80% of samples
+###  option=2: rows_to_keep <- apply(heatmap_props,1,max) >= 0.01 ## taxa with abundance in any sample exceeding 1%
+###=====
+
+heatmap_grouped <- function(summed_props, heatmap_s, grps = c("study_group", "study_day"), fname=NULL, thre=0.8, option=1, prop_cut=0.01, satu_limit=0.4){
+  
+  #color = saturated_rainbow(101)
+  color = saturated_rainbow(101, saturation_limit=satu_limit)
+  breaks = c(0, 1e-10, seq(0.001, 1, length.out = 100))
+  
+  heatmap_props <- summed_props[,heatmap_s$SampleID]
+  
+  if (option == 1) {
+    rows_to_keep <- filter_low_coverage(heatmap_props, frac_cutoff=thre) 
+  } else if (option == 2) {
+    rows_to_keep <- apply(heatmap_props,1,max) >= prop_cut 
+  }
+  heatmap_props <- heatmap_props[rows_to_keep,]
+  
+  ## group the SampleIDs
+  heatmap_s %<>% arrange_(.dots=grps)
+  heatmap_props <- heatmap_props[, heatmap_s$SampleID]
+  
+  ## update the annotation
+  annc <- heatmap_s[,grps] %>% as.data.frame()
+  rownames(annc) <- heatmap_s$SampleID
+  colnames(annc) <- grps
+  
+  ## heatmap time
+  if (!is.null(fname))
+    pheatmap(heatmap_props, annotation = annc, color = color, breaks = breaks, filename = fname, 
+             fontsize_col = 8, fontsize_row = 8, cluster_cols = FALSE, cluster_rows = FALSE,cellheight = 8, cellwidth = 8)
+  else
+    pheatmap(heatmap_props, annotation = annc, color = color, breaks = breaks, 
+             fontsize_col = 8, fontsize_row = 8, cluster_cols = FALSE, cluster_rows = FALSE,cellheight = 8, cellwidth = 8)
+}
+
 ```
 
 <!-- ================================================================================================ -->
@@ -79,12 +154,6 @@ source("R_functions.R")
 ###   define constants
 ### ===========================
 
-### run date
-run_date <- "PLEASE FILL ME IN WITH A DATE SUCH AS October 3rd, 2017"
-
-### investigator
-investigator <- "PLEASE FILL ME IN WITH INVESTIGATOR NAME SUCH AS Mark Brown"
-
 ### minimum reads threshold
 min_reads <- 1000
 
@@ -94,27 +163,24 @@ richness_subsample_size <- 1000
 ### data files directory
 data_files_dir <- "data_files"
 
-### porject directory
-proj_dir <- "16s"
-
 ### mapping file path
-#mapping_file_fp <- file.path(data_files_dir, "PLEASE FILL ME IN WITH MAPPING FILE NAME SUCH AS 20171003_brown_mapping_file.txt")
-mapping_file_fp <- file.path(data_files_dir, "20171003_brown_mapping_file.txt")
+#mapping_file_fp <- file.path(data_files_dir, "PLEASE FILL ME IN WITH MAPPING FILE NAME")
+mapping_file_fp <- file.path("mapping_file.txt")
 
 ### otu table file path
-feature_table_fp <- file.path(proj_dir, "table", "feature-table.tsv")
+feature_table_fp <- file.path("denoising-results", "table", "feature-table.tsv")
 
 ### taxonomic assignment 
-taxo_assignment_fp <- file.path(proj_dir, "taxonomy", "taxonomy.tsv")
+taxo_assignment_fp <- file.path("denoising-results", "taxonomy", "taxonomy.tsv")
 
 ### unweighted UniFrac file path
-uu_fp <- file.path(proj_dir, "core-metrics-results", "uu", "distance-matrix.tsv")
+uu_fp <- file.path("core-metrics-results", "uu", "distance-matrix.tsv")
 
 ### weighted UniFrac file path
-wu_fp <- file.path(proj_dir, "core-metrics-results", "wu", "distance-matrix.tsv")
+wu_fp <- file.path("core-metrics-results", "wu", "distance-matrix.tsv")
 
 ### faith
-faith_fp <- file.path(proj_dir, "core-metrics-results", "faith", "alpha-diversity.tsv")
+faith_fp <- file.path("core-metrics-results", "faith", "alpha-diversity.tsv")
 ```
 
 ```{r, warning=F}
@@ -136,12 +202,6 @@ if(length(header_idx)>0) {
 if(length(header_idx)>1) {
   shape_by <- potential_headers[header_idx[2]]
 }
-
-### Check if the sample names start with a number. If they do, add an "X" to the front
-toFix = grepl("^[0-9]", s$SampleID)
-s$SampleIDorig = s$SampleID
-s$SampleID[toFix] = paste0('X', s$SampleID[toFix])
-s$SampleID <- gsub("-", ".", s$SampleID)
 
 ### read otu table
 o <- read.table(feature_table_fp, skip=1, header=T, as.is=T, sep="\t", comment.char="")
@@ -182,8 +242,8 @@ s <- s %>%
 
 ### alpha diversity measures: faith
 faith <- read.table(file=faith_fp, header=T, sep="\t", as.is=T) %>%
-  dplyr::rename(SampleIDorig=X)
-s <- merge(s, faith, by="SampleIDorig", all.x=T)
+  dplyr::rename(SampleID=X)
+s <- merge(s, faith, by="SampleID", all.x=T)
 ```
 
 ```{r}
@@ -199,6 +259,17 @@ s <- merge(s, faith, by="SampleIDorig", all.x=T)
 common_sample_list <- intersect(s$SampleID, colnames(counts))
 s <- s[s$SampleID %in% common_sample_list, ]
 counts <- counts[, common_sample_list]
+```
+
+```{r}
+#run_dates <- unique(s$run_start_date)
+#run_dates <- c("20171103", "20170622")
+
+#apply(run_dates, function(x) paste())
+
+run_date <- paste(unique(s$run_start_date), collapse = " ")
+#run_data <- paste(run_date[5:6], run_date[], collapse="")
+investigator <- paste(unique(s$investigators), collapse = " ")
 ```
 
 # Introduction
@@ -223,8 +294,10 @@ ggplot(s, aes(x=Read_Counts)) +
 
 ```{r}
 ### Whole samples discarded that are below the read count threshold of min_reads
-s$Keep <- s$Read_Counts > min_reads
-s$KeepLabel <- factor(ifelse(s$Keep, "Keep", "Discard"))
+s <- s %>%
+  mutate(Keep = Read_Counts > min_reads) %>%
+  mutate(KeepLabel = factor(ifelse(Keep, "Keep", "Discard"))) %>%
+  mutate(isControl = grepl("geneblock|freewater|extractemptywell", SampleID, ignore.case = TRUE))
 keep_table <- table(s[, color_by], s$KeepLabel)
 pander(keep_table)
 ```
@@ -243,7 +316,8 @@ Each column of the heatmap represents one sample and each row represents one tax
 The chart is colored white if taxa were not observed in the sample, dark blue if taxa were observed at very low abundance. This allows the reader to quickly survey presence/absence. Abundance values exceeding `r 100*satu_limit`% are colored red, indicating an extremely dominant species.
 
 ```{r, fig.height=12, fig.width=16}
-s_toPlot <- s[s$Keep,] %>%
+s_toPlot <- s %>%
+  filter(Keep) %>%
   mutate(study_group=as.character(study_group))
 cts_toPlot <- counts[, s_toPlot$SampleID]  
 a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
@@ -312,14 +386,8 @@ Similarity between samples was assessed by unweighted and weighted UniFrac dista
 ## Unweighted UniFrac distances
 
 ```{r}
-dist_type <- "uu" ## unweighted or weighted
-if (dist_type=="uu") {
-  dist_fp <- uu_fp
-  dist_name <- "unweighted UniFrac distances"
-} else if (dist_type=="wu") {
-  dist_fp <- wu_fp
-  dist_name <- "weighted UniFrac distances"
-}
+dist_fp <- uu_fp
+dist_name <- "unweighted UniFrac distances"
 ```
 
 The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
@@ -327,14 +395,12 @@ The `r dist_name` was employed to compare the species composition of the samples
 ### PCoA plot
 
 ```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
-s_toPlot <- s[s$Keep, ]
-s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|extractemptywell", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
+s_toPlot <- s %>%
+  filter(Keep) %>%
+  filter(!isControl)
 
-dist_in <- read_qiime_distmat(dist_fp)
-dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
-pcoa_title <- paste0("PCoA plot based on ", dist_name)
-pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by=color_by, shape_by=NULL, title = pcoa_title)
-plot(pcoa_plot)
+dist_in <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot$SampleID)
+plot(make_pcoa_plot(dist_in, s_toPlot, color_by=color_by, shape_by=NULL))
 ```
 
 \newpage
@@ -353,14 +419,8 @@ plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab=""
 ## Weighted UniFrac distances
 
 ```{r}
-dist_type <- "wu" ## unweighted or weighted
-if (dist_type=="uu") {
-  dist_fp <- uu_fp
-  dist_name <- "unweighted UniFrac distances"
-} else if (dist_type=="wu") {
-  dist_fp <- wu_fp
-  dist_name <- "weighted UniFrac distances"
-}
+dist_fp <- wu_fp
+dist_name <- "weighted UniFrac distances"
 ```
 
 The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
@@ -368,14 +428,12 @@ The `r dist_name` was employed to compare the species composition of the samples
 ### PCoA plot
 
 ```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
-s_toPlot <- s[s$Keep, ]
-s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|extractemptywell", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
+s_toPlot <- s %>%
+  filter(Keep) %>%
+  filter(!isControl)
 
-dist_in <- read_qiime_distmat(dist_fp)
-dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
-pcoa_title <- paste0("PCoA plot based on ", dist_name)
-pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by=color_by, shape_by=NULL, title = pcoa_title)
-plot(pcoa_plot)
+dist_in <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot$SampleID)
+plot(make_pcoa_plot(dist_in, s_toPlot, color_by=color_by, shape_by=NULL))
 ```
 
 \newpage
@@ -393,5 +451,8 @@ plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab=""
 
 # APPENDIX: Counts of high quality paired reads for each sample
 ```{r}
-s %>% select(SampleID, Read_Counts) %>% arrange(-Read_Counts) %>% pander()
+s %>% 
+  select(SampleID, Read_Counts) %>% 
+  arrange(-Read_Counts) %>% 
+  pander()
 ```
