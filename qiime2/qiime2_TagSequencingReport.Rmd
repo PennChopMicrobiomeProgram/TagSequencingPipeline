@@ -5,8 +5,6 @@ date: \today
 output: 
     pdf_document:
         keep_tex: true
-        includes:
-            in_header: TeX_packages_commands.sty
 ---
 
 <!-- ================================================================================================ -->
@@ -37,7 +35,6 @@ opts_chunk$set(
 ### ================
 ###   R packages
 ### ================
-library(plyr)
 library(dplyr)
 library(magrittr)
 library(qiimer)
@@ -47,11 +44,9 @@ library(vegan)
 library(ggplot2)
 library(pheatmap)
 library(tidyr)
-library(broom)
-library(reshape2)
-library(kylemisc)
-library(gtools) 
 library(usedist)
+library(readr)
+library(tibble)
 ```
 
 <!-- resources -->
@@ -65,11 +60,15 @@ library(usedist)
 <!-- user defined functions -->
 ```{r user defined functions}
 ### ================
-###   User defined functions, if any
+###   User defined functions
 ### ================
 
+filter_low_coverage <- function(props, frac_cutoff=0.6, min_ab=0){
+  frac_nonzero <- function (x) sum(x > min_ab) / length(x)
+  apply(props, 1, frac_nonzero) >= frac_cutoff
+}
+
 ###=====
-###  thanks to Ceylan
 ###  make_pcoa_plot <- function(uu, s, shape_by, color_by, title)
 ###  uu: distance, s: mapping file, shape_by: variable used for shape, color_by: variable used for color
 ###=====
@@ -100,7 +99,6 @@ make_pcoa_plot <- function(dm, s, shape_by, color_by) {
 }
 
 ###=====
-###  thanks to Chunyu
 ###  heatmap_grouped <- function(genus_props, heatmap_s, grps = c("study_group", "study_day"), fname=NULL, thre=0.8, option=1)
 ###  option=1: rows_to_keep <- filter_low_coverage(heatmap_props, perc_cutoff=thre) ## taxa found in at least 80% of samples
 ###  option=2: rows_to_keep <- apply(heatmap_props,1,max) >= 0.01 ## taxa with abundance in any sample exceeding 1%
@@ -160,11 +158,10 @@ min_reads <- 1000
 ### rarefying subsample size 
 richness_subsample_size <- 1000
 
-### data files directory
-data_files_dir <- "data_files"
+### number of samples threshold to show heatmap on the page
+sample_threshold <- 100
 
 ### mapping file path
-#mapping_file_fp <- file.path(data_files_dir, "PLEASE FILL ME IN WITH MAPPING FILE NAME")
 mapping_file_fp <- file.path("mapping_file.txt")
 
 ### otu table file path
@@ -204,24 +201,32 @@ if(length(header_idx)>1) {
 }
 
 ### read otu table
-o <- read.table(feature_table_fp, skip=1, header=T, as.is=T, sep="\t", comment.char="")
-rownames(o) <- o$X.OTU.ID
-counts <- o %>% select(-X.OTU.ID) %>% as.matrix()
+counts <- readr::read_delim(feature_table_fp, skip=1, delim="\t") %>%
+  column_to_rownames(var = "#OTU ID") %>%
+  as.matrix()
 
 ### get read counts
 read_counts <- colSums(counts) %>% 
-  melt() %>% 
-  dplyr::rename(Read_Counts=value) 
-s <- merge(s, read_counts, by.x="SampleID", by.y="row.names", all.x=T)
+  as.data.frame() %>%
+  setNames(c("Read_Counts")) %>%
+  rownames_to_column(var="SampleID")
+
+### find the samples to keep
+s <- merge(s, read_counts, by="SampleID", all.x=T) %>%
+  mutate(Keep = Read_Counts > min_reads) %>%
+  mutate(isControl = grepl("geneblock|freewater|extract", SampleID, ignore.case = TRUE))
 
 ### taxonomic assignment
-ta <- read.table(file=taxo_assignment_fp, header=T, sep="\t", as.is=T)
-ta$trunc_taxon <- sub("(; [kpcofgs]__)+$", "", ta$Taxon, perl=T)
-rownames(ta) <- ta$Feature.ID
-ta <- ta[rownames(o), c("trunc_taxon", "Confidence")]
-md <- ta$trunc_taxon
-names(md) <- rownames(ta)
-adf <- split_assignments(md) 
+ta <- read_delim(file=taxo_assignment_fp, delim="\t") %>%
+  mutate(trunc_taxon = sub("(; [kpcofgs]__)+$", "", Taxon, perl=T)) %>%
+  arrange(order(match(rownames(counts), `Feature ID`)))
+
+### check if the order of the assignments and the order of featue table is the same
+if (!all(rownames(counts) == ta$`Feature ID`)) {
+  stop (simpleError("The order of the features in the table and classifications don't match"))
+}
+
+adf <- split_assignments(ta$trunc_taxon) 
 
 ### remove contamination
 is_mitochondrial <- grepl("mitochondria", adf$Family)
@@ -233,43 +238,62 @@ counts <- counts[!is_contam,]
 adf <- adf[!is_contam,]
 rm(is_contam, is_mitochondrial, is_chloroplast, is_unassigned, is_archaea)
 
-### alpha diversity measures: richness and shannon
+a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
+summed_cts <- rowsum(counts, a) 
+summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/")
+```
+
+```{r}
+### ===========================
+###   check for missing samples
+### ===========================
+
+### possible issue 1: Samples found in the sample sheet but not in the feature table (0 reads)
+s_missing <- s %>%
+  filter(!SampleID %in% colnames(counts)) %>%
+  select(SampleID, SampleType, isControl)
+
+if (any(!s_missing$isControl)) {
+  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
+}
+
+### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
+in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
+if (length(in_counts_not_in_s) > 0) {
+  stop (simpleError("These SampleID(s) are in the feature table, but not found in the sample sheet.", paste(in_counts_not_in_s, collapse=" ")))
+}
+
+s[s$SampleID %in% s_missing$SampleID, "Keep"] <- FALSE
+```
+
+```{r}
+### ===========================
+###   calculate / read in alpha diversity
+### ===========================
+
+faith <- read.delim(file=faith_fp, stringsAsFactors = F) %>%
+  dplyr::rename(SampleID=X)
+
 s <- s %>%
   merge(diversity(t(counts)), by.x="SampleID", by.y="row.names", all.x=T) %>%
   dplyr::rename(shannon = y) %>%
   merge(rarefy(t(counts), richness_subsample_size), by.x="SampleID", by.y="row.names", all.x=T) %>%
-  dplyr::rename(richness = y) 
-
-### alpha diversity measures: faith
-faith <- read.table(file=faith_fp, header=T, sep="\t", as.is=T) %>%
-  dplyr::rename(SampleID=X)
-s <- merge(s, faith, by="SampleID", all.x=T)
+  dplyr::rename(richness = y) %>%
+  merge(faith, by="SampleID", all.x=T)
 ```
 
 ```{r}
 ### ===========================
-###   data preprocessing and etc
+###   extract investigator and run date from the sample sheet
 ### ===========================
 
-### possible issue 1: any mismatch between s$SampleID and colames(counts)?
-#in_s_not_in_counts <- setdiff(s$SampleID, colnames(counts))
-#if (length(in_s_not_in_counts) > 0) stop (simpleError("These SampleID(s) are in the mapping file, but not found in the feature table.", paste(in_s_not_in_counts, collapse=" ")))
-#in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
-#if (length(in_counts_not_in_s) > 0) stop (simpleError("These SampleID(s) are in the feature table, but not found in the mapping file.", paste(in_counts_not_in_s, collapse=" ")))
-common_sample_list <- intersect(s$SampleID, colnames(counts))
-s <- s[s$SampleID %in% common_sample_list, ]
-counts <- counts[, common_sample_list]
-```
+change_data_format <- function(d) {
+  paste(substr(d,5,6), substr(d,7,8), substr(d,1,4), sep="-")
+}
+all_dates <- as.character(unique(s$run_start_date))
+run_date <- paste(lapply(all_dates, change_data_format), collapse=', ')
 
-```{r}
-#run_dates <- unique(s$run_start_date)
-#run_dates <- c("20171103", "20170622")
-
-#apply(run_dates, function(x) paste())
-
-run_date <- paste(unique(s$run_start_date), collapse = " ")
-#run_data <- paste(run_date[5:6], run_date[], collapse="")
-investigator <- paste(unique(s$investigators), collapse = " ")
+investigator <- paste(unique(s$investigators), collapse = ", ")
 ```
 
 # Introduction
@@ -293,13 +317,7 @@ ggplot(s, aes(x=Read_Counts)) +
 ## Whole samples that are above the `r min_reads` read count threshold
 
 ```{r}
-### Whole samples discarded that are below the read count threshold of min_reads
-s <- s %>%
-  mutate(Keep = Read_Counts > min_reads) %>%
-  mutate(KeepLabel = factor(ifelse(Keep, "Keep", "Discard"))) %>%
-  mutate(isControl = grepl("geneblock|freewater|extractemptywell", SampleID, ignore.case = TRUE))
-keep_table <- table(s[, color_by], s$KeepLabel)
-pander(keep_table)
+pander(table(s[, color_by], factor(ifelse(s$Keep, "Keep", "Discard"))))
 ```
 
 \newpage
@@ -309,24 +327,30 @@ pander(keep_table)
 ```{r}
 prop_cut <- 0.01
 satu_limit <- 0.4
+heatmap_fp <- "otu_heatmap.pdf"
+show.text <- sum(s$Keep) > sample_threshold
 ```
 
 Each column of the heatmap represents one sample and each row represents one taxon, typically a genus. Taxa were included in the chart if the abundance in any sample exceeded `r 100*prop_cut`%. 
 
 The chart is colored white if taxa were not observed in the sample, dark blue if taxa were observed at very low abundance. This allows the reader to quickly survey presence/absence. Abundance values exceeding `r 100*satu_limit`% are colored red, indicating an extremely dominant species.
 
+`r if(show.text){paste0("Please see attached plot ", heatmap_fp, ".")}`
+
 ```{r, fig.height=12, fig.width=16}
 s_toPlot <- s %>%
   filter(Keep) %>%
   mutate(study_group=as.character(study_group))
-cts_toPlot <- counts[, s_toPlot$SampleID]  
-a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
-summed_cts <- rowsum(cts_toPlot, a) 
-summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/") 
+
+props_toPlot <- summed_props[, s_toPlot$SampleID]  
 grps <- c(color_by, shape_by)
 
-### heatmap with a gap
-heatmap_grouped(summed_props, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
+### grouped heatmap
+if (dim(s_toPlot)[1] > sample_threshold) {
+  heatmap_grouped(props_toPlot, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit, fname = heatmap_fp)
+} else {
+  heatmap_grouped(props_toPlot, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
+}
 ```
 
 \newpage
@@ -346,6 +370,7 @@ s %>% filter(Keep) %>%
   labs(y=alpha_measure, x=color_by, color=color_by) +
   theme_bw() +
   theme(axis.text.x=element_text(angle=-25, hjust= .1)) +
+  guides(color=F) +
   scale_color_brewer(palette = "Set2")
 ```
 
@@ -360,6 +385,7 @@ s %>% filter(Keep) %>%
   labs(y=alpha_measure, x=color_by, color=color_by) +
   theme_bw() +
   theme(axis.text.x=element_text(angle=-25, hjust= .1)) +
+  guides(color=F) +
   scale_color_brewer(palette = "Set2")
 ```
 
@@ -374,6 +400,7 @@ s %>% filter(Keep) %>%
   labs(y=alpha_measure, x=color_by, color=color_by) +
   theme_bw() +
   theme(axis.text.x=element_text(angle=-25, hjust= .1)) +
+  guides(color=F) +
   scale_color_brewer(palette = "Set2")
 ```
 
@@ -452,7 +479,7 @@ plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab=""
 # APPENDIX: Counts of high quality paired reads for each sample
 ```{r}
 s %>% 
-  select(SampleID, Read_Counts) %>% 
+  select(SampleID, Read_Counts, final_library_concentration_ng_ul) %>% 
   arrange(-Read_Counts) %>% 
   pander()
 ```
