@@ -31,7 +31,7 @@ EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp-paired-end-sequences"
 DATA_DIR="${WORK_DIR}/data_files"
 DEMUX_DIR="${WORK_DIR}/demux-results"
 DENOISE_DIR="${WORK_DIR}/denoising-results"
-METRIC_DIR="${WORK_DIR}/core-metric-results"
+METRIC_DIR="${WORK_DIR}/core-metrics-results"
 
 ###=====================
 ### gunzip INDEX1 AND INDEX2, IF NECESSARY
