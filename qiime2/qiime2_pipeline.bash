@@ -3,13 +3,20 @@ set -x
 set -e
 set -u
 
-if [ $# -ne 2 ]; then
-	echo "Usage: $0 WORK_DIR MAPPING_FP"
+if [ $# -ne 1 ]; then
+	echo "Usage: $0 MAPPING_FP"
 	exit 1
 fi
 
-WORK_DIR=$1
-MAPPING_FP=$2
+MAPPING_FP=$1
+WORK_DIR="$(dirname ${MAPPING_FP})"
+
+SOURCE_REL="${BASH_SOURCE[0]}"
+SOURCE_ABS="$(readlink -f ${SOURCE_REL})"
+SOURCE_DIR="$( dirname ${SOURCE_ABS} )"
+
+### PATH TO Ceylan's CODE TO COMBINE I1 and I2
+INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/../combine_barcodes.py"
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
@@ -19,11 +26,6 @@ MAPPING_FP=$2
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
 CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
-
-
-### PATH TO Ceylan's CODE TO COMBINE I1 and I2
-
-INDEX1_INDEX2_COMBINE_SCRIPT="${HOME}/combine_barcodes.py"
 
 EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp-paired-end-sequences"
 DATA_DIR="${WORK_DIR}/data_files"
@@ -228,4 +230,3 @@ biom convert \
   -i "${DENOISE_DIR}/table/feature-table.biom" \
   -o "${DENOISE_DIR}/table/feature-table.tsv" \
   --to-tsv
-
