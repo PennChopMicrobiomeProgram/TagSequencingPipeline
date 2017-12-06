@@ -61,12 +61,12 @@ fi
 ### COMBINE INDEX1 AND INDEX2 AND gzip
 ###=====================
 
-python ${INDEX1_INDEX2_COMBINE_SCRIPT} ${DATA_DIR}
-gzip "${DATA_DIR}/Undetermined_S0_L001_I12_001.fastq"
+python ${INDEX1_INDEX2_COMBINE_SCRIPT} --work-dir "${DATA_DIR}"
+gzip "${DATA_DIR}/barcodes.fastq"
 
 FWD="${DATA_DIR}/Undetermined_S0_L001_R1_001.fastq.gz"
 REV="${DATA_DIR}/Undetermined_S0_L001_R2_001.fastq.gz"
-IDX="${DATA_DIR}/Undetermined_S0_L001_I12_001.fastq.gz"
+IDX="${DATA_DIR}/barcodes.fastq.gz"
 
 ###=====================
 ### DATA IMPORT
@@ -79,7 +79,7 @@ fi
 if [ ! -e "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz" ]; then
     mv ${FWD} "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz"
     mv ${REV} "${EMP_PAIRED_END_SEQUENCES_DIR}/reverse.fastq.gz"
-    mv ${IDX} "${EMP_PAIRED_END_SEQUENCES_DIR}/barcodes.fastq.gz"
+    mv ${IDX} "${EMP_PAIRED_END_SEQUENCES_DIR}"
 fi
 
 qiime tools import \
@@ -108,7 +108,7 @@ qiime demux summarize \
 
 qiime tools export \
   "${DEMUX_DIR}/demux.qzv" \
-  --output-dir "${DEMUX_DIR}/demux-qzv"
+  --output-dir "${DEMUX_DIR}/demux"
 
 ###=====================
 ###  SEQUENCE QC AND FEATURE TABLE
@@ -141,11 +141,11 @@ qiime feature-table tabulate-seqs \
 
 qiime tools export \
   "${DENOISE_DIR}/table.qzv" \
-  --output-dir "${DENOISE_DIR}/table-qzv"
+  --output-dir "${DENOISE_DIR}/table"
 
 qiime tools export \
   "${DENOISE_DIR}/table.qza" \
-  --output-dir "${DENOISE_DIR}/table-qza"
+  --output-dir "${DENOISE_DIR}/table"
 
 ###=====================
 ###  TAXONOMIC ANALYSIS
@@ -162,7 +162,7 @@ qiime metadata tabulate \
 
 qiime tools export \
   "${DENOISE_DIR}/taxonomy.qza" \
-  --output-dir "${DENOISE_DIR}/taxonomy-qza"
+  --output-dir "${DENOISE_DIR}/taxonomy"
 
 ###=====================
 ###  GENERATE TREES
