@@ -236,9 +236,11 @@ is_archaea <- grepl("Archaea", adf$Kingdom)
 is_contam <- is_mitochondrial | is_chloroplast | is_unassigned ### Archaea kept to check positive control samples
 counts <- counts[!is_contam,]
 adf <- adf[!is_contam,]
+ta <- ta[!is_contam,]
 rm(is_contam, is_mitochondrial, is_chloroplast, is_unassigned, is_archaea)
 
 a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
+names(a) <- ta$`Feature ID`
 summed_cts <- rowsum(counts, a) 
 summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/")
 ```
