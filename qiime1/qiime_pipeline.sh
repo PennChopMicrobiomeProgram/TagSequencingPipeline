@@ -30,7 +30,7 @@ QIIME_PARAMS_FP="${HOME}/qiime_parameters.txt"
 
 FWD="${DATA_DIR}/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_R1_001.fastq"
 REV="${DATA_DIR}/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_R2_001.fastq"
-IDX="${DATA_DIR}/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_I1_001.fastq"
+IDX="${DATA_DIR}/Undetermined_S0_L$(printf "%03d" $LANE_NUM)_I12_001.fastq"
 
 # check if joined_dir exists, if it doesn't, execute
 if [ ! -d $JOINED_DIR ]; then
@@ -50,7 +50,7 @@ split_libraries_fastq.py \
     -q19 \
     -o $LIBRARY_DIR \
     --rev_comp_mapping_barcodes \
-    --barcode_type golay_12 \
+    --barcode_type 24 \
     --max_barcode_errors=0
 
 pick_de_novo_otus.py \
