@@ -263,7 +263,7 @@ Alpha diversity was assessd by the expected number of observed OTUs (out of rare
 
 ## Number of observed OTUs
 
-```{r, fig.height=2.5}
+```{r, fig.height=3, out.height="5cm"}
 alpha_measure <- "richness"
 
 s %>% filter(Keep) %>%
@@ -277,7 +277,7 @@ s %>% filter(Keep) %>%
 
 ## Shannon Index
 
-```{r, fig.height=2.5}
+```{r, fig.height=3, out.height="5cm"}
 alpha_measure <- "shannon"
 
 s %>% filter(Keep) %>%
@@ -291,7 +291,7 @@ s %>% filter(Keep) %>%
 
 ## Faith’s Phylogenetic Diversity
 
-```{r, fig.height=2.5}
+```{r, fig.height=3, out.height="5cm"}
 alpha_measure <- "faith_pd"
 
 s %>% filter(Keep) %>%
@@ -329,9 +329,12 @@ The `r dist_name` was employed to compare the species composition of the samples
 ```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
 s_toPlot <- s[s$Keep, ]
 s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|extractemptywell", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
+SampleIDorig_present_in_s_toPlot <- s_toPlot$SampleIDorig[s_toPlot$Keep]
 
 dist_in <- read_qiime_distmat(dist_fp)
-dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
+SampleIDorig_present_in_dist_in <- attributes(dist_in)$Labels
+
+dist_in <- dist_subset(dist_in, intersect(SampleIDorig_present_in_dist_in, SampleIDorig_present_in_s_toPlot))
 pcoa_title <- paste0("PCoA plot based on ", dist_name)
 pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by=color_by, shape_by=NULL, title = pcoa_title)
 plot(pcoa_plot)
@@ -368,11 +371,10 @@ The `r dist_name` was employed to compare the species composition of the samples
 ### PCoA plot
 
 ```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
-s_toPlot <- s[s$Keep, ]
-s_toPlot$Keep <- ifelse(grepl("geneblock|freewater|extractemptywell", s_toPlot$SampleID, ignore.case = TRUE), FALSE, TRUE)
-
 dist_in <- read_qiime_distmat(dist_fp)
-dist_in <- dist_subset(dist_in, s_toPlot$SampleID[s_toPlot$Keep])
+SampleIDorig_present_in_dist_in <- attributes(dist_in)$Labels
+
+dist_in <- dist_subset(dist_in, intersect(SampleIDorig_present_in_dist_in, SampleIDorig_present_in_s_toPlot))
 pcoa_title <- paste0("PCoA plot based on ", dist_name)
 pcoa_plot <- make_pcoa_plot(dist_in, s_toPlot[s_toPlot$Keep,], color_by=color_by, shape_by=NULL, title = pcoa_title)
 plot(pcoa_plot)

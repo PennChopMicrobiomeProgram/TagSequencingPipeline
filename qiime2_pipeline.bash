@@ -17,8 +17,10 @@ PROJECT_NAME=$3
 CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
 
-### PATH TO Ceylan's CODE TO COMBINE I1 and I2
+### PATH TO PYTHON2
+PHYTON2="/home/leej39/miniconda3/bin/python"
 
+### PATH TO Ceylan's CODE TO COMBINE I1 and I2
 INDEX1_INDEX2_COMBINE_SCRIPT="${HOME}/combine_barcodes.py"
 
 DATA_DIR="${WORK_DIR}/data_files"
@@ -56,7 +58,7 @@ fi
 ### COMBINE INDEX1 AND INDEX2 AND gzip
 ###=====================
 
-python ${INDEX1_INDEX2_COMBINE_SCRIPT} ${DATA_DIR}
+${PHYTON2} ${INDEX1_INDEX2_COMBINE_SCRIPT} ${DATA_DIR}
 gzip "${DATA_DIR}/Undetermined_S0_L001_I12_001.fastq"
 
 FWD="${DATA_DIR}/Undetermined_S0_L001_R1_001.fastq.gz"
@@ -109,9 +111,9 @@ qiime tools export \
 qiime dada2 denoise-paired \
   --i-demultiplexed-seqs "${PROJECT_DIR}/demux.qza" \
   --p-trim-left-f 0 \
-  --p-trunc-len-f 230 \
+  --p-trunc-len-f 240 \
   --p-trim-left-r 0 \
-  --p-trunc-len-r 230 \
+  --p-trunc-len-r 240 \
   --p-n-threads 8 \
   --o-representative-sequences "${PROJECT_DIR}/rep-seqs.qza" \
   --o-table "${PROJECT_DIR}/table.qza"
@@ -124,10 +126,6 @@ qiime feature-table summarize \
 qiime feature-table tabulate-seqs \
   --i-data "${PROJECT_DIR}/rep-seqs.qza" \
   --o-visualization "${PROJECT_DIR}/rep-seqs.qzv"
-
-qiime tools export \
-  "${PROJECT_DIR}/table.qzv" \
-  --output-dir "${PROJECT_DIR}/table"
 
 qiime tools export \
   "${PROJECT_DIR}/table.qza" \
@@ -174,19 +172,14 @@ qiime phylogeny midpoint-root \
 ###  ALPHA AND BETA DIVERSITY
 ###=====================
 
-qiime diversity core-metrics \
+### method "core-metrics-phylogenetic" was added in qiime2-2017.10
+
+qiime diversity core-metrics-phylogenetic \
   --i-phylogeny "${PROJECT_DIR}/rooted-tree.qza" \
   --i-table "${PROJECT_DIR}/table.qza" \
   --p-sampling-depth 10000 \
+  --m-metadata-file ${MAPPING_FP} \
   --output-dir "${PROJECT_DIR}/core-metrics-results"
-
-qiime tools export \
-  "${PROJECT_DIR}/core-metrics-results/observed_otus_vector.qza" \
-  --output-dir "${PROJECT_DIR}/core-metrics-results/observed_otu"
-
-qiime tools export \
-  "${PROJECT_DIR}/core-metrics-results/shannon_vector.qza" \
-  --output-dir "${PROJECT_DIR}/core-metrics-results/shannon"
 
 qiime tools export \
   "${PROJECT_DIR}/core-metrics-results/faith_pd_vector.qza" \
@@ -199,6 +192,8 @@ qiime tools export \
 qiime tools export \
   "${PROJECT_DIR}/core-metrics-results/weighted_unifrac_distance_matrix.qza" \
   --output-dir "${PROJECT_DIR}/core-metrics-results/wu"
+
+
 
 ###=====================
 ###  BIOM CONVERT
