@@ -341,8 +341,7 @@ The chart is colored white if taxa were not observed in the sample, dark blue if
 
 ```{r, fig.height=12, fig.width=16}
 s_toPlot <- s %>%
-  filter(Keep) %>%
-  mutate(study_group=as.character(study_group))
+  filter(Keep)
 
 props_toPlot <- summed_props[, s_toPlot$SampleID]  
 grps <- c(color_by, shape_by)
