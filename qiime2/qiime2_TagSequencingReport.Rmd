@@ -1,0 +1,486 @@
+---
+title: "Basic Bioinformatics Overview"
+author: "PennCHOP Microbiome Program"
+date: \today
+output: 
+    pdf_document:
+        keep_tex: true
+---
+
+<!-- ================================================================================================ -->
+<!--   Beginning of Preamble : Preamble seldom requires change                                        -->
+<!-- ================================================================================================ -->
+
+<!-- knitr setup -->
+```{r knitr setup, echo=FALSE}
+### ================
+###   knitr setup
+### ================
+library(knitr)
+opts_chunk$set(
+  tidy=FALSE,
+  cache=FALSE,
+  echo=FALSE,
+  warning=FALSE,
+  message=FALSE,
+  dpi=100,
+  fig.width=8,
+  fig.height=8,
+  fig.align = "center"
+  )
+```
+
+<!-- R packages -->
+```{r R packages, message=FALSE}
+### ================
+###   R packages
+### ================
+library(dplyr)
+library(magrittr)
+library(qiimer)
+library(pander)
+library(ape)
+library(vegan)
+library(ggplot2)
+library(pheatmap)
+library(tidyr)
+library(usedist)
+library(readr)
+library(tibble)
+```
+
+<!-- resources -->
+```{r resources}
+### ================
+###   R resources
+### ================
+#source("R_functions.R")
+```
+
+<!-- user defined functions -->
+```{r user defined functions}
+### ================
+###   User defined functions
+### ================
+
+filter_low_coverage <- function(props, frac_cutoff=0.6, min_ab=0){
+  frac_nonzero <- function (x) sum(x > min_ab) / length(x)
+  apply(props, 1, frac_nonzero) >= frac_cutoff
+}
+
+###=====
+###  make_pcoa_plot <- function(uu, s, shape_by, color_by, title)
+###  uu: distance, s: mapping file, shape_by: variable used for shape, color_by: variable used for color
+###=====
+
+make_pcoa_plot <- function(dm, s, shape_by, color_by) {
+  dm <- usedist::dist_subset(dm, s$SampleID)
+  pc <- pcoa(dm)
+  pc_df <- merge(s, pc$vectors[, 1:3], by.x="SampleID", by.y="row.names")
+  pc_pct <- round(pc$values$Relative_eig * 100)
+  
+  pcoa_plot = ggplot(pc_df, aes(x=Axis.1, y=Axis.2)) +
+    theme_bw() +
+    scale_shape_discrete(name=sub("_", " ", shape_by)) + 
+    scale_colour_discrete(name=sub("_", " ", color_by)) +
+    labs(
+      x=paste0("PCoA axis 1 (", pc_pct[1], "%)"),
+      y=paste0("PCoA axis 2 (", pc_pct[2], "%)")
+    )
+  
+  if (is.null(shape_by) & !is.null(color_by)) {
+    pcoa_plot <- pcoa_plot + geom_point(aes(colour=factor(get(color_by))))
+  } else if (!is.null(shape_by) & !is.null(color_by)) {
+    pcoa_plot <- pcoa_plot + geom_point(aes(colour=factor(get(color_by)), shape=factor(get(shape_by))))
+  } else {
+    pcoa_plot <- pcoa_plot + geom_point()
+  }
+  return(pcoa_plot)
+}
+
+###=====
+###  heatmap_grouped <- function(genus_props, heatmap_s, grps = c("study_group", "study_day"), fname=NULL, thre=0.8, option=1)
+###  option=1: rows_to_keep <- filter_low_coverage(heatmap_props, perc_cutoff=thre) ## taxa found in at least 80% of samples
+###  option=2: rows_to_keep <- apply(heatmap_props,1,max) >= 0.01 ## taxa with abundance in any sample exceeding 1%
+###=====
+
+heatmap_grouped <- function(summed_props, heatmap_s, grps = c("study_group", "study_day"), fname=NULL, thre=0.8, option=1, prop_cut=0.01, satu_limit=0.4){
+  
+  #color = saturated_rainbow(101)
+  color = saturated_rainbow(101, saturation_limit=satu_limit)
+  breaks = c(0, 1e-10, seq(0.001, 1, length.out = 100))
+  
+  heatmap_props <- summed_props[,heatmap_s$SampleID]
+  
+  if (option == 1) {
+    rows_to_keep <- filter_low_coverage(heatmap_props, frac_cutoff=thre) 
+  } else if (option == 2) {
+    rows_to_keep <- apply(heatmap_props,1,max) >= prop_cut 
+  }
+  heatmap_props <- heatmap_props[rows_to_keep,]
+  
+  ## group the SampleIDs
+  heatmap_s %<>% arrange_(.dots=grps)
+  heatmap_props <- heatmap_props[, heatmap_s$SampleID]
+  
+  ## update the annotation
+  annc <- heatmap_s[,grps] %>% as.data.frame()
+  rownames(annc) <- heatmap_s$SampleID
+  colnames(annc) <- grps
+  
+  ## heatmap time
+  if (!is.null(fname))
+    pheatmap(heatmap_props, annotation = annc, color = color, breaks = breaks, filename = fname, 
+             fontsize_col = 8, fontsize_row = 8, cluster_cols = FALSE, cluster_rows = FALSE,cellheight = 8, cellwidth = 8)
+  else
+    pheatmap(heatmap_props, annotation = annc, color = color, breaks = breaks, 
+             fontsize_col = 8, fontsize_row = 8, cluster_cols = FALSE, cluster_rows = FALSE,cellheight = 8, cellwidth = 8)
+}
+
+```
+
+<!-- ================================================================================================ -->
+<!--   End of Preamble                                                                                -->
+<!-- ================================================================================================ -->
+
+<!-- ================================================================================================ -->
+<!--   Beginning of Project Specific Items                                                            -->
+<!-- ================================================================================================ -->
+
+```{r}
+### ===========================
+###   define constants
+### ===========================
+
+### minimum reads threshold
+min_reads <- 1000
+
+### rarefying subsample size 
+richness_subsample_size <- 1000
+
+### number of samples threshold to show heatmap on the page
+sample_threshold <- 100
+
+### mapping file path
+mapping_file_fp <- file.path("mapping_file.txt")
+
+### otu table file path
+feature_table_fp <- file.path("denoising-results", "table", "feature-table.tsv")
+
+### taxonomic assignment 
+taxo_assignment_fp <- file.path("denoising-results", "taxonomy", "taxonomy.tsv")
+
+### unweighted UniFrac file path
+uu_fp <- file.path("core-metrics-results", "uu", "distance-matrix.tsv")
+
+### weighted UniFrac file path
+wu_fp <- file.path("core-metrics-results", "wu", "distance-matrix.tsv")
+
+### faith
+faith_fp <- file.path("core-metrics-results", "faith", "alpha-diversity.tsv")
+```
+
+```{r, warning=F}
+### ===========================
+###   read in data
+### ===========================
+
+### read mapping file
+s <- read_qiime_mapping_file(mapping_file_fp) 
+
+### check for the column names to assign color_by and shape_by for pcoa plots
+color_by <- NULL
+shape_by <- NULL
+potential_headers <- c("study_group", "SampleType", "study_day", "cage_number")
+header_idx = which(is.element(potential_headers, colnames(s)))
+if(length(header_idx)>0) {
+  color_by <- potential_headers[header_idx[1]]
+}
+if(length(header_idx)>1) {
+  shape_by <- potential_headers[header_idx[2]]
+}
+
+### read otu table
+counts <- readr::read_delim(feature_table_fp, skip=1, delim="\t") %>%
+  column_to_rownames(var = "#OTU ID") %>%
+  as.matrix()
+
+### get read counts
+read_counts <- colSums(counts) %>% 
+  as.data.frame() %>%
+  setNames(c("Read_Counts")) %>%
+  rownames_to_column(var="SampleID")
+
+### find the samples to keep
+s <- merge(s, read_counts, by="SampleID", all.x=T) %>%
+  mutate(Keep = Read_Counts > min_reads) %>%
+  mutate(isControl = grepl("geneblock|freewater|extract", SampleID, ignore.case = TRUE))
+
+### taxonomic assignment
+ta <- read_delim(file=taxo_assignment_fp, delim="\t") %>%
+  mutate(trunc_taxon = sub("(; [kpcofgs]__)+$", "", Taxon, perl=T)) %>%
+  arrange(order(match(rownames(counts), `Feature ID`)))
+
+### check if the order of the assignments and the order of featue table is the same
+if (!all(rownames(counts) == ta$`Feature ID`)) {
+  stop (simpleError("The order of the features in the table and classifications don't match"))
+}
+
+adf <- split_assignments(ta$trunc_taxon) 
+
+### remove contamination
+is_mitochondrial <- grepl("mitochondria", adf$Family)
+is_chloroplast <- grepl("Chloroplast", adf$Class)
+is_unassigned <- grepl("Unassigned", adf$Kingdom)
+is_archaea <- grepl("Archaea", adf$Kingdom)
+is_contam <- is_mitochondrial | is_chloroplast | is_unassigned ### Archaea kept to check positive control samples
+counts <- counts[!is_contam,]
+adf <- adf[!is_contam,]
+ta <- ta[!is_contam,]
+rm(is_contam, is_mitochondrial, is_chloroplast, is_unassigned, is_archaea)
+
+a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
+names(a) <- ta$`Feature ID`
+summed_cts <- rowsum(counts, a) 
+summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/")
+```
+
+```{r}
+### ===========================
+###   check for missing samples
+### ===========================
+
+### possible issue 1: Samples found in the sample sheet but not in the feature table (0 reads)
+s_missing <- s %>%
+  filter(!SampleID %in% colnames(counts)) %>%
+  select(SampleID, SampleType, isControl)
+
+if (any(!s_missing$isControl)) {
+  pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
+}
+
+### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
+in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
+if (length(in_counts_not_in_s) > 0) {
+  stop (simpleError("These SampleID(s) are in the feature table, but not found in the sample sheet.", paste(in_counts_not_in_s, collapse=" ")))
+}
+
+s[s$SampleID %in% s_missing$SampleID, "Keep"] <- FALSE
+```
+
+```{r}
+### ===========================
+###   calculate / read in alpha diversity
+### ===========================
+
+faith <- read.delim(file=faith_fp, stringsAsFactors = F) %>%
+  dplyr::rename(SampleID=X)
+
+s <- s %>%
+  merge(diversity(t(counts)), by.x="SampleID", by.y="row.names", all.x=T) %>%
+  dplyr::rename(shannon = y) %>%
+  merge(rarefy(t(counts), richness_subsample_size), by.x="SampleID", by.y="row.names", all.x=T) %>%
+  dplyr::rename(richness = y) %>%
+  merge(faith, by="SampleID", all.x=T)
+```
+
+```{r}
+### ===========================
+###   extract investigator and run date from the sample sheet
+### ===========================
+
+change_data_format <- function(d) {
+  paste(substr(d,5,6), substr(d,7,8), substr(d,1,4), sep="-")
+}
+all_dates <- as.character(unique(s$run_start_date))
+run_date <- paste(lapply(all_dates, change_data_format), collapse=', ')
+
+investigator <- paste(unique(s$investigators), collapse = ", ")
+```
+
+# Introduction
+This report is based on the results of sequencing performed on `r run_date` for `r investigator` Project. 
+
+## Histogram of high quality paired reads per sample
+The black dashed vertical line shows the minimum number of reads (`r min_reads`) for analysis. Control samples, if any, were included in the histogram.
+
+```{r, fig.width=6, fig.height=4}
+ggplot(s, aes(x=Read_Counts)) +
+    geom_histogram(aes(fill=SampleType), binwidth=1000) +
+    geom_vline(xintercept = min_reads, color="black", linetype="dashed") +
+    theme_classic() +
+    theme_bw() + 
+    xlab("Number of reads in sample") +
+    ylab("Number of samples")
+```
+
+\newpage
+
+## Whole samples that are above the `r min_reads` read count threshold
+
+```{r}
+pander(table(s[, color_by], factor(ifelse(s$Keep, "Keep", "Discard"))))
+```
+
+\newpage
+
+# Taxonomic heatmap
+
+```{r}
+prop_cut <- 0.01
+satu_limit <- 0.4
+heatmap_fp <- "otu_heatmap.pdf"
+show.text <- sum(s$Keep) > sample_threshold
+```
+
+Each column of the heatmap represents one sample and each row represents one taxon, typically a genus. Taxa were included in the chart if the abundance in any sample exceeded `r 100*prop_cut`%. 
+
+The chart is colored white if taxa were not observed in the sample, dark blue if taxa were observed at very low abundance. This allows the reader to quickly survey presence/absence. Abundance values exceeding `r 100*satu_limit`% are colored red, indicating an extremely dominant species.
+
+`r if(show.text){paste0("Please see attached plot ", heatmap_fp, ".")}`
+
+```{r, fig.height=12, fig.width=16}
+s_toPlot <- s %>%
+  filter(Keep)
+
+props_toPlot <- summed_props[, s_toPlot$SampleID]  
+grps <- c(color_by, shape_by)
+
+### grouped heatmap
+if (dim(s_toPlot)[1] > sample_threshold) {
+  heatmap_grouped(props_toPlot, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit, fname = heatmap_fp)
+} else {
+  heatmap_grouped(props_toPlot, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
+}
+```
+
+\newpage
+
+# Alpha Diversity
+
+Alpha diversity was assessd by the expected number of observed OTUs (out of rarefying sample size of `r richness_subsample_size`), Shannon index, and Faith’s phylogenetic diversity.
+
+## Number of observed OTUs
+
+```{r, fig.height=2.5}
+alpha_measure <- "richness"
+
+s %>% filter(Keep) %>%
+  ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
+  geom_boxplot() +
+  labs(y=alpha_measure, x=color_by, color=color_by) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-25, hjust= .1)) +
+  guides(color=F) +
+  scale_color_brewer(palette = "Set2")
+```
+
+## Shannon Index
+
+```{r, fig.height=2.5}
+alpha_measure <- "shannon"
+
+s %>% filter(Keep) %>%
+  ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
+  geom_boxplot() +
+  labs(y=alpha_measure, x=color_by, color=color_by) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-25, hjust= .1)) +
+  guides(color=F) +
+  scale_color_brewer(palette = "Set2")
+```
+
+## Faith’s Phylogenetic Diversity
+
+```{r, fig.height=2.5}
+alpha_measure <- "faith_pd"
+
+s %>% filter(Keep) %>%
+  ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
+  geom_boxplot() +
+  labs(y=alpha_measure, x=color_by, color=color_by) +
+  theme_bw() +
+  theme(axis.text.x=element_text(angle=-25, hjust= .1)) +
+  guides(color=F) +
+  scale_color_brewer(palette = "Set2")
+```
+
+\newpage 
+
+# Beta diversity
+
+Similarity between samples was assessed by unweighted and weighted UniFrac distances. 
+
+## Unweighted UniFrac distances
+
+```{r}
+dist_fp <- uu_fp
+dist_name <- "unweighted UniFrac distances"
+```
+
+The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+
+### PCoA plot
+
+```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
+s_toPlot <- s %>%
+  filter(Keep) %>%
+  filter(!isControl)
+
+dist_in <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot$SampleID)
+plot(make_pcoa_plot(dist_in, s_toPlot, color_by=color_by, shape_by=NULL))
+```
+
+\newpage
+
+### UPGMA clustering 
+
+The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
+
+```{r, fig.width=12, fig.height=5, echo=FALSE}
+hc = hclust(dist_in, method="average")
+plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
+```
+
+\newpage
+
+## Weighted UniFrac distances
+
+```{r}
+dist_fp <- wu_fp
+dist_name <- "weighted UniFrac distances"
+```
+
+The `r dist_name` was employed to compare the species composition of the samples to each other. We used a method of ordination called Principal Coordinates Analysis to select the best 2D coordinate system for display. The percentage in each axis represents the proportion of the total variance captured along the axis. 
+
+### PCoA plot
+
+```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
+s_toPlot <- s %>%
+  filter(Keep) %>%
+  filter(!isControl)
+
+dist_in <- usedist::dist_subset(read_qiime_distmat(dist_fp), s_toPlot$SampleID)
+plot(make_pcoa_plot(dist_in, s_toPlot, color_by=color_by, shape_by=NULL))
+```
+
+\newpage
+
+### UPGMA clustering 
+
+The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
+
+```{r, fig.width=12, fig.height=5, echo=FALSE}
+hc = hclust(dist_in, method="average")
+plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
+```
+
+\newpage
+
+# APPENDIX: Counts of high quality paired reads for each sample
+```{r}
+s %>% 
+  select(SampleID, Read_Counts, final_library_concentration_ng_ul) %>% 
+  arrange(-Read_Counts) %>% 
+  pander()
+```

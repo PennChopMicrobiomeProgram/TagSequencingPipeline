@@ -1,8 +1,7 @@
 import sys
 import os.path
+import argparse
 import itertools
-
-work_dir = sys.argv[1] 
 
 class FastqRead(object):
     def __init__(self, read):
@@ -15,7 +14,7 @@ def _grouper(iterable, n):
     "Collect data into fixed-length chunks or blocks"
     # grouper('ABCDEFG', 3) --> ABC DEF
     args = [iter(iterable)] * n
-    return itertools.izip(*args)
+    return zip(*args)
 
 def parse_fastq(f):
     for desc, seq, _, qual in _grouper(f, 4):
@@ -24,18 +23,37 @@ def parse_fastq(f):
         qual = qual.rstrip()
         yield desc, seq, qual
 
-I1 = os.path.join(work_dir, "Undetermined_S0_L001_I1_001.fastq")
-I2 = os.path.join(work_dir, "Undetermined_S0_L001_I2_001.fastq")
-I = os.path.join(work_dir, "Undetermined_S0_L001_I12_001.fastq")
+def combine_barcodes_main(argv=None):
+    p = argparse.ArgumentParser()
+    
+    # Input
+    p.add_argument(
+        "--work-dir", required=True,
+        help="Directory where the files are present")
+    p.add_argument(
+        "--I1-fp", required=False,
+        default="Undetermined_S0_L001_I1_001.fastq",
+        help="I1 FASTQ files")
+    p.add_argument(
+        "--I2-fp", required=False,
+        default="Undetermined_S0_L001_I2_001.fastq",
+        help="I2 FASTQ files")
+    # Output
+    p.add_argument(
+        "--out-fp", required=False,
+        default="barcodes.fastq",
+        help="")
+    args = p.parse_args(argv)
+    
+    I1 = os.path.join(args.work_dir, args.I1_fp)
+    I2 = os.path.join(args.work_dir, args.I2_fp)
+    I = os.path.join(args.work_dir, args.out_fp)
 
-I1_handle = open(I1)
-I2_handle = open(I2)    
-fwds = (FastqRead(x) for x in parse_fastq(I1_handle))
-revs = (FastqRead(x) for x in parse_fastq(I2_handle))
+    with open(I, "w") as f_out, open(I1,'r') as I1_handle, open(I2, 'r') as I2_handle:
+        fwds = (FastqRead(x) for x in parse_fastq(I1_handle))
+        revs = (FastqRead(x) for x in parse_fastq(I2_handle))
+        for fwd, rev in zip(fwds, revs):
+            f_out.write("@%s\n%s\n+\n%s\n" % (fwd.desc, fwd.seq+rev.seq, fwd.qual+rev.qual))
 
-with open(I, "w") as f_out:
-    for fwd, rev in itertools.izip(fwds, revs):
-        f_out.write("@%s\n%s\n+\n%s\n" % (fwd.desc, fwd.seq+rev.seq, fwd.qual+rev.qual))
-
-I1_handle.close()
-I2_handle.close()
+if __name__ == "__main__":
+    combine_barcodes_main()
