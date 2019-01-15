@@ -97,7 +97,7 @@ fi
 
 qiime demux emp-paired \
   --m-barcodes-file ${MAPPING_FP} \
-  --m-barcodes-category BarcodeSequence \
+  --m-barcodes-column BarcodeSequence \
   --i-seqs "${WORK_DIR}/emp-paired-end-sequences.qza" \
   --p-rev-comp-mapping-barcodes \
   --o-per-sample-sequences "${DEMUX_DIR}/demux.qza"
