@@ -5,6 +5,8 @@ set -u
 
 if [ $# -ne 1 ]; then
 	echo "Usage: $0 MAPPING_FP"
+    echo "MAPPING_FP is the mapping file for Qimme2"
+    echo "Data files should be in a directory named "data_files""
 	exit 1
 fi
 
@@ -82,10 +84,12 @@ if [ ! -e "${EMP_PAIRED_END_SEQUENCES_DIR}/forward.fastq.gz" ]; then
     mv ${IDX} "${EMP_PAIRED_END_SEQUENCES_DIR}"
 fi
 
-qiime tools import \
-  --type EMPPairedEndSequences \
-  --input-path ${EMP_PAIRED_END_SEQUENCES_DIR} \
-  --output-path "${WORK_DIR}/emp-paired-end-sequences.qza"
+if [ ! -e "${WORK_DIR}/emp-paired-end-sequences.qza" ]; then
+    qiime tools import \
+      --type EMPPairedEndSequences \
+      --input-path ${EMP_PAIRED_END_SEQUENCES_DIR} \
+      --output-path "${WORK_DIR}/emp-paired-end-sequences.qza"
+fi
 
 ###=====================
 ### DEMULTIPLEXING SEQUENCE
@@ -95,20 +99,26 @@ if [ ! -d ${DEMUX_DIR} ]; then
         mkdir ${DEMUX_DIR}
 fi
 
-qiime demux emp-paired \
-  --m-barcodes-file ${MAPPING_FP} \
-  --m-barcodes-column BarcodeSequence \
-  --i-seqs "${WORK_DIR}/emp-paired-end-sequences.qza" \
-  --p-rev-comp-mapping-barcodes \
-  --o-per-sample-sequences "${DEMUX_DIR}/demux.qza"
+if [ ! -e "${DEMUX_DIR}/demux.qza" ]; then
+    qiime demux emp-paired \
+      --m-barcodes-file ${MAPPING_FP} \
+      --m-barcodes-column BarcodeSequence \
+      --i-seqs "${WORK_DIR}/emp-paired-end-sequences.qza" \
+      --p-rev-comp-mapping-barcodes \
+      --o-per-sample-sequences "${DEMUX_DIR}/demux.qza"
+fi
 
-qiime demux summarize \
-  --i-data "${DEMUX_DIR}/demux.qza" \
-  --o-visualization "${DEMUX_DIR}/demux.qzv"
+if [ ! -e "${DEMUX_DIR}/demux.qzv" ]; then
+    qiime demux summarize \
+      --i-data "${DEMUX_DIR}/demux.qza" \
+      --o-visualization "${DEMUX_DIR}/demux.qzv"
+fi
 
-qiime tools export \
-  "${DEMUX_DIR}/demux.qzv" \
-  --output-dir "${DEMUX_DIR}/demux"
+if [ -e "${DEMUX_DIR}/demux.qzv" ]; then
+    qiime tools export \
+      "${DEMUX_DIR}/demux.qzv" \
+      --output-dir "${DEMUX_DIR}/demux"
+fi
 
 ###=====================
 ###  SEQUENCE QC AND FEATURE TABLE
