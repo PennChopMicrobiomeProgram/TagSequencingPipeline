@@ -118,7 +118,7 @@ fi
 
 if [ -e "${DEMUX_DIR}/demux.qzv" ]; then
     qiime tools export \
-      "${DEMUX_DIR}/demux.qzv" \
+      --input-path "${DEMUX_DIR}/demux.qzv" \
       --output-path "${DEMUX_DIR}/demux"
 fi
 
@@ -159,13 +159,13 @@ fi
 
 if [ -e "${DENOISE_DIR}/table.qza" ]; then
     qiime tools export \
-      "${DENOISE_DIR}/table.qzv" \
+      --input-path "${DENOISE_DIR}/table.qzv" \
       --output-path "${DENOISE_DIR}/table"
 fi
 
 if [ -e "${DENOISE_DIR}/table.qza" ]; then
     qiime tools export \
-      "${DENOISE_DIR}/table.qza" \
+      --input-path "${DENOISE_DIR}/table.qza" \
       --output-path "${DENOISE_DIR}/table"
 fi
 
@@ -183,7 +183,7 @@ qiime metadata tabulate \
   --o-visualization "${DENOISE_DIR}/taxonomy.qzv"
 
 qiime tools export \
-  "${DENOISE_DIR}/taxonomy.qza" \
+  --input-path "${DENOISE_DIR}/taxonomy.qza" \
   --output-path "${DENOISE_DIR}/taxonomy"
 
 ###=====================
@@ -221,7 +221,7 @@ qiime diversity alpha-phylogenetic \
   --o-alpha-diversity "${METRIC_DIR}/faith_pd_vector.qza"
 
 qiime tools export \
-  "${METRIC_DIR}/faith_pd_vector.qza" \
+  --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
   --output-path "${METRIC_DIR}/faith"
 
 qiime diversity beta-phylogenetic \
@@ -231,7 +231,7 @@ qiime diversity beta-phylogenetic \
   --o-distance-matrix "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza"
 
 qiime tools export \
-  "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
+  --input-path "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
   --output-path "${METRIC_DIR}/wu"
 
 qiime diversity beta-phylogenetic \
@@ -241,7 +241,7 @@ qiime diversity beta-phylogenetic \
   --o-distance-matrix "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza"
 
 qiime tools export \
-  "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
+  --input-path "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
   --output-path "${METRIC_DIR}/uu"
 
 ###=====================
