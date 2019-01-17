@@ -117,7 +117,7 @@ fi
 if [ -e "${DEMUX_DIR}/demux.qzv" ]; then
     qiime tools export \
       "${DEMUX_DIR}/demux.qzv" \
-      --output-dir "${DEMUX_DIR}/demux"
+      --output-path "${DEMUX_DIR}/demux"
 fi
 
 ###=====================
@@ -130,32 +130,42 @@ fi
 
 ## discussion needed for denosing parameters below
 
-qiime dada2 denoise-paired \
-  --i-demultiplexed-seqs "${DEMUX_DIR}/demux.qza" \
-  --p-trim-left-f 0 \
-  --p-trunc-len-f 230 \
-  --p-trim-left-r 0 \
-  --p-trunc-len-r 230 \
-  --p-n-threads 8 \
-  --o-representative-sequences "${DENOISE_DIR}/rep-seqs.qza" \
-  --o-table "${DENOISE_DIR}/table.qza"
+if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
+    qiime dada2 denoise-paired \
+      --i-demultiplexed-seqs "${DEMUX_DIR}/demux.qza" \
+      --p-trim-left-f 0 \
+      --p-trunc-len-f 230 \
+      --p-trim-left-r 0 \
+      --p-trunc-len-r 230 \
+      --p-n-threads 8 \
+      --o-representative-sequences "${DENOISE_DIR}/rep-seqs.qza" \
+      --o-table "${DENOISE_DIR}/table.qza"
+fi
 
-qiime feature-table summarize \
-  --i-table "${DENOISE_DIR}/table.qza" \
-  --o-visualization "${DENOISE_DIR}/table.qzv" \
-  --m-sample-metadata-file ${MAPPING_FP}
+if [ -e "${DENOISE_DIR}/table.qza" ]; then
+    qiime feature-table summarize \
+      --i-table "${DENOISE_DIR}/table.qza" \
+      --o-visualization "${DENOISE_DIR}/table.qzv" \
+      --m-sample-metadata-file ${MAPPING_FP}
+fi
 
-qiime feature-table tabulate-seqs \
-  --i-data "${DENOISE_DIR}/rep-seqs.qza" \
-  --o-visualization "${DENOISE_DIR}/rep-seqs.qzv"
+if [ -e "${DENOISE_DIR}/rep-seqs.qza" ]; then
+    qiime feature-table tabulate-seqs \
+      --i-data "${DENOISE_DIR}/rep-seqs.qza" \
+      --o-visualization "${DENOISE_DIR}/rep-seqs.qzv"
+fi
 
-qiime tools export \
-  "${DENOISE_DIR}/table.qzv" \
-  --output-dir "${DENOISE_DIR}/table"
+if [ -e "${DENOISE_DIR}/table.qza" ]; then
+    qiime tools export \
+      "${DENOISE_DIR}/table.qzv" \
+      --output-path "${DENOISE_DIR}/table"
+fi
 
-qiime tools export \
-  "${DENOISE_DIR}/table.qza" \
-  --output-dir "${DENOISE_DIR}/table"
+if [ -e "${DENOISE_DIR}/table.qza" ]; then
+    qiime tools export \
+      "${DENOISE_DIR}/table.qza" \
+      --output-path "${DENOISE_DIR}/table"
+fi
 
 ###=====================
 ###  TAXONOMIC ANALYSIS
@@ -172,7 +182,7 @@ qiime metadata tabulate \
 
 qiime tools export \
   "${DENOISE_DIR}/taxonomy.qza" \
-  --output-dir "${DENOISE_DIR}/taxonomy"
+  --output-path "${DENOISE_DIR}/taxonomy"
 
 ###=====================
 ###  GENERATE TREES
@@ -210,7 +220,7 @@ qiime diversity alpha-phylogenetic \
 
 qiime tools export \
   "${METRIC_DIR}/faith_pd_vector.qza" \
-  --output-dir "${METRIC_DIR}/faith"
+  --output-path "${METRIC_DIR}/faith"
 
 qiime diversity beta-phylogenetic \
   --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
@@ -220,7 +230,7 @@ qiime diversity beta-phylogenetic \
 
 qiime tools export \
   "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
-  --output-dir "${METRIC_DIR}/wu"
+  --output-path "${METRIC_DIR}/wu"
 
 qiime diversity beta-phylogenetic \
   --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
@@ -230,7 +240,7 @@ qiime diversity beta-phylogenetic \
 
 qiime tools export \
   "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
-  --output-dir "${METRIC_DIR}/uu"
+  --output-path "${METRIC_DIR}/uu"
 
 ###=====================
 ###  BIOM CONVERT
