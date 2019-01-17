@@ -63,8 +63,10 @@ fi
 ### COMBINE INDEX1 AND INDEX2 AND gzip
 ###=====================
 
-python ${INDEX1_INDEX2_COMBINE_SCRIPT} --work-dir "${DATA_DIR}"
-gzip "${DATA_DIR}/barcodes.fastq"
+if [ ! -e "${DATA_DIR}/barcodes.fastq.gz" ]; then
+    python ${INDEX1_INDEX2_COMBINE_SCRIPT} --work-dir "${DATA_DIR}"
+    gzip "${DATA_DIR}/barcodes.fastq"
+fi
 
 FWD="${DATA_DIR}/Undetermined_S0_L001_R1_001.fastq.gz"
 REV="${DATA_DIR}/Undetermined_S0_L001_R2_001.fastq.gz"
