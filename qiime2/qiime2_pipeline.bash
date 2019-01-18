@@ -141,6 +141,7 @@ if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
       --p-trunc-len-r 230 \
       --p-n-threads 8 \
       --o-representative-sequences "${DENOISE_DIR}/rep-seqs.qza" \
+      --o-denoising-stats "${DENOISE_DIR}/denoising-stats.txt" \
       --o-table "${DENOISE_DIR}/table.qza"
 fi
 
@@ -173,18 +174,24 @@ fi
 ###  TAXONOMIC ANALYSIS
 ###=====================
 
-qiime feature-classifier classify-sklearn \
-  --i-classifier ${CLASSIFIER_FP} \
-  --i-reads "${DENOISE_DIR}/rep-seqs.qza" \
-  --o-classification "${DENOISE_DIR}/taxonomy.qza"
+if [ ! -e "${DENOISE_DIR}/taxonomy.qza" ]; then
+    qiime feature-classifier classify-sklearn \
+      --i-classifier ${CLASSIFIER_FP} \
+      --i-reads "${DENOISE_DIR}/rep-seqs.qza" \
+      --o-classification "${DENOISE_DIR}/taxonomy.qza"
+fi
 
-qiime metadata tabulate \
-  --m-input-file "${DENOISE_DIR}/taxonomy.qza" \
-  --o-visualization "${DENOISE_DIR}/taxonomy.qzv"
+if [ -e "${DENOISE_DIR}/taxonomy.qza" ]; then
+    qiime metadata tabulate \
+      --m-input-file "${DENOISE_DIR}/taxonomy.qza" \
+      --o-visualization "${DENOISE_DIR}/taxonomy.qzv"
+fi
 
-qiime tools export \
-  --input-path "${DENOISE_DIR}/taxonomy.qza" \
-  --output-path "${DENOISE_DIR}/taxonomy"
+if [ -e "${DENOISE_DIR}/taxonomy.qza" ]; then
+    qiime tools export \
+      --input-path "${DENOISE_DIR}/taxonomy.qza" \
+      --output-path "${DENOISE_DIR}/taxonomy"
+fi
 
 ###=====================
 ###  GENERATE TREES
