@@ -197,21 +197,29 @@ fi
 ###  GENERATE TREES
 ###=====================
 
-qiime alignment mafft \
-  --i-sequences "${DENOISE_DIR}/rep-seqs.qza" \
-  --o-alignment "${DENOISE_DIR}/aligned-rep-seqs.qza"
+if [ ! -e "${DENOISE_DIR}/aligned-rep-seqs.qza" ]; then
+    qiime alignment mafft \
+      --i-sequences "${DENOISE_DIR}/rep-seqs.qza" \
+      --o-alignment "${DENOISE_DIR}/aligned-rep-seqs.qza"
+fi
 
-qiime alignment mask \
-  --i-alignment "${DENOISE_DIR}/aligned-rep-seqs.qza" \
-  --o-masked-alignment "${DENOISE_DIR}/masked-aligned-rep-seqs.qza"
+if [ ! -e "${DENOISE_DIR}/masked-aligned-rep-seqs.qza" ]; then
+    qiime alignment mask \
+      --i-alignment "${DENOISE_DIR}/aligned-rep-seqs.qza" \
+      --o-masked-alignment "${DENOISE_DIR}/masked-aligned-rep-seqs.qza"
+fi
 
-qiime phylogeny fasttree \
-  --i-alignment "${DENOISE_DIR}/masked-aligned-rep-seqs.qza" \
-  --o-tree "${DENOISE_DIR}/unrooted-tree.qza"
+if [ ! -e "${DENOISE_DIR}/unrooted-tree.qza" ]; then
+    qiime phylogeny fasttree \
+      --i-alignment "${DENOISE_DIR}/masked-aligned-rep-seqs.qza" \
+      --o-tree "${DENOISE_DIR}/unrooted-tree.qza"
+fi
 
-qiime phylogeny midpoint-root \
-  --i-tree "${DENOISE_DIR}/unrooted-tree.qza" \
-  --o-rooted-tree "${DENOISE_DIR}/rooted-tree.qza"
+if [ ! -e "${DENOISE_DIR}/rooted-tree.qza" ]; then
+    qiime phylogeny midpoint-root \
+      --i-tree "${DENOISE_DIR}/unrooted-tree.qza" \
+      --o-rooted-tree "${DENOISE_DIR}/rooted-tree.qza"
+fi
 
 ###=====================
 ###  ALPHA AND BETA DIVERSITY
@@ -221,31 +229,37 @@ if [ ! -d ${METRIC_DIR} ]; then
         mkdir ${METRIC_DIR}
 fi
 
-qiime diversity alpha-phylogenetic \
-  --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
-  --i-table "${DENOISE_DIR}/table.qza" \
-  --p-metric faith_pd \
-  --o-alpha-diversity "${METRIC_DIR}/faith_pd_vector.qza"
+if [ ! -e "${METRIC_DIR}/faith_pd_vector.qza" ]; then
+    qiime diversity alpha-phylogenetic \
+      --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+      --i-table "${DENOISE_DIR}/table.qza" \
+      --p-metric faith_pd \
+      --o-alpha-diversity "${METRIC_DIR}/faith_pd_vector.qza"
+fi
 
 qiime tools export \
   --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
   --output-path "${METRIC_DIR}/faith"
 
-qiime diversity beta-phylogenetic \
-  --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
-  --i-table "${DENOISE_DIR}/table.qza" \
-  --p-metric weighted_unifrac \
-  --o-distance-matrix "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza"
+if [ ! -e "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" ]; then
+    qiime diversity beta-phylogenetic \
+      --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+      --i-table "${DENOISE_DIR}/table.qza" \
+      --p-metric weighted_unifrac \
+      --o-distance-matrix "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza"
+fi
 
 qiime tools export \
   --input-path "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
   --output-path "${METRIC_DIR}/wu"
 
-qiime diversity beta-phylogenetic \
-  --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
-  --i-table "${DENOISE_DIR}/table.qza" \
-  --p-metric unweighted_unifrac \
-  --o-distance-matrix "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza"
+if [ ! -e "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" ]; then
+    qiime diversity beta-phylogenetic \
+      --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+      --i-table "${DENOISE_DIR}/table.qza" \
+      --p-metric unweighted_unifrac \
+      --o-distance-matrix "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza"
+fi
 
 qiime tools export \
   --input-path "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
@@ -255,7 +269,9 @@ qiime tools export \
 ###  BIOM CONVERT
 ###=====================
 
-biom convert \
-  -i "${DENOISE_DIR}/table/feature-table.biom" \
-  -o "${DENOISE_DIR}/table/feature-table.tsv" \
-  --to-tsv
+if [ ! -e "${DENOISE_DIR}/table/feature-table.tsv" ]; then
+    biom convert \
+      -i "${DENOISE_DIR}/table/feature-table.biom" \
+      -o "${DENOISE_DIR}/table/feature-table.tsv" \
+      --to-tsv
+fi
