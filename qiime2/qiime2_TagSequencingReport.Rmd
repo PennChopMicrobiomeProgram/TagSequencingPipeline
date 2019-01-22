@@ -161,8 +161,11 @@ richness_subsample_size <- 1000
 ### number of samples threshold to show heatmap on the page
 sample_threshold <- 100
 
+### setwd
+setwd("/media/lorax/users/danielsg/usda_tutorial")
+
 ### mapping file path
-mapping_file_fp <- file.path("mapping_file.txt")
+mapping_file_fp <- file.path("288.txt")
 
 ### otu table file path
 feature_table_fp <- file.path("denoising-results", "table", "feature-table.tsv")
@@ -258,7 +261,21 @@ s_missing <- s %>%
 if (any(!s_missing$isControl)) {
   pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
 }
+```
 
+<!-- Output -->
+<!-- ------------------------------------------------- -->
+<!--       SampleID          SampleType     isControl  -->
+<!-- -------------------- ---------------- ----------- -->
+<!--  DNACleanupControl2   DNA Cleanupneg     FALSE    -->
+
+<!--  DNACleanupControl4   DNA Cleanupneg     FALSE    -->
+<!-- ------------------------------------------------- -->
+
+<!-- Table: These samples were in the sample sheet but not in the feature table. -->
+<!-- And they are actually control so this is ok -->
+
+```{r}
 ### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
 in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
 if (length(in_counts_not_in_s) > 0) {
