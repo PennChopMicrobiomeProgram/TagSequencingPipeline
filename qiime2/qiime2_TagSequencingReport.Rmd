@@ -162,7 +162,7 @@ richness_subsample_size <- 1000
 sample_threshold <- 100
 
 ### setwd
-setwd("/media/lorax/users/danielsg/usda_tutorial")
+opts_knit$set(root.dir = "/media/lorax/users/danielsg/usda_tutorial")
 
 ### mapping file path
 mapping_file_fp <- file.path("288.txt")
