@@ -1,7 +1,9 @@
 #!/bin/bash
 set -x
 set -e
-set -u
+#set -u
+
+source activate qiime2-2018.11
 
 if [ $# -ne 1 ]; then
 	echo "Usage: $0 MAPPING_FP"
@@ -30,7 +32,7 @@ INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/../combine_barcodes.py"
 CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
 EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp-paired-end-sequences"
-DATA_DIR="${WORK_DIR}/data_files"
+DATA_DIR="${WORK_DIR}/data-files"
 DEMUX_DIR="${WORK_DIR}/demux-results"
 DENOISE_DIR="${WORK_DIR}/denoising-results"
 METRIC_DIR="${WORK_DIR}/core-metrics-results"
@@ -160,12 +162,6 @@ fi
 
 if [ -e "${DENOISE_DIR}/table.qza" ]; then
     qiime tools export \
-      --input-path "${DENOISE_DIR}/table.qzv" \
-      --output-path "${DENOISE_DIR}/table"
-fi
-
-if [ -e "${DENOISE_DIR}/table.qza" ]; then
-    qiime tools export \
       --input-path "${DENOISE_DIR}/table.qza" \
       --output-path "${DENOISE_DIR}/table"
 fi
@@ -240,6 +236,8 @@ fi
 qiime tools export \
   --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
   --output-path "${METRIC_DIR}/faith"
+
+#Get an error here, something about "Data non-symmetric and/or contains NaNs"
 
 if [ ! -e "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" ]; then
     qiime diversity beta-phylogenetic \
