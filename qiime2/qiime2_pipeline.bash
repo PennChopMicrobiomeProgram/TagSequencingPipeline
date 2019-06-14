@@ -1,13 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
 set -x
 set -e
 #set -u
 
-source activate qiime2-2018.11
+source ~/.bashrc
+conda activate qiime2-2018.11
 
 if [ $# -ne 1 ]; then
 	echo "Usage: $0 MAPPING_FP"
-    echo "MAPPING_FP is the mapping file for Qimme2"
+    echo "MAPPING_FP is the mapping file for Qiime2"
     echo "Data files should be in a directory named "data_files""
 	exit 1
 fi
@@ -15,12 +17,13 @@ fi
 MAPPING_FP=$1
 WORK_DIR="$(dirname ${MAPPING_FP})"
 
+# See https://www.ostricher.com/2014/10/the-right-way-to-get-the-directory-of-a-bash-script/
 SOURCE_REL="${BASH_SOURCE[0]}"
 SOURCE_ABS=$(readlink -f "${SOURCE_REL}")
 SOURCE_DIR=$(dirname "${SOURCE_ABS}")
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
-INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/../combine_barcodes.py"
+INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/combine_barcodes.py"
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
@@ -28,14 +31,14 @@ INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/../combine_barcodes.py"
 ## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
-#CLASSIFIER_FP="${HOME}/gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
+#CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
 CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
-EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp-paired-end-sequences"
-DATA_DIR="${WORK_DIR}/data-files"
-DEMUX_DIR="${WORK_DIR}/demux-results"
-DENOISE_DIR="${WORK_DIR}/denoising-results"
-METRIC_DIR="${WORK_DIR}/core-metrics-results"
+EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp_paired_end_sequences"
+DATA_DIR="${WORK_DIR}/data_files"
+DEMUX_DIR="${WORK_DIR}/demux_results"
+DENOISE_DIR="${WORK_DIR}/denoising_results"
+METRIC_DIR="${WORK_DIR}/core_metrics_results"
 
 ###=====================
 ### gunzip INDEX1 AND INDEX2, IF NECESSARY
@@ -118,7 +121,7 @@ if [ ! -e "${DEMUX_DIR}/demux.qzv" ]; then
       --o-visualization "${DEMUX_DIR}/demux.qzv"
 fi
 
-if [ -e "${DEMUX_DIR}/demux.qzv" ]; then
+if [[ ! -e "${DEMUX_DIR}/demux" && -e "${DEMUX_DIR}/demux.qzv" ]]; then
     qiime tools export \
       --input-path "${DEMUX_DIR}/demux.qzv" \
       --output-path "${DEMUX_DIR}/demux"
@@ -147,20 +150,20 @@ if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
       --o-table "${DENOISE_DIR}/table.qza"
 fi
 
-if [ -e "${DENOISE_DIR}/table.qza" ]; then
+if [[ ! -e  "${DENOISE_DIR}/table.qzv" && -e "${DENOISE_DIR}/table.qza" ]]; then
     qiime feature-table summarize \
       --i-table "${DENOISE_DIR}/table.qza" \
       --o-visualization "${DENOISE_DIR}/table.qzv" \
       --m-sample-metadata-file ${MAPPING_FP}
 fi
 
-if [ -e "${DENOISE_DIR}/rep-seqs.qza" ]; then
+if [[ ! -e "${DENOISE_DIR}/rep-seqs.qzv" && -e "${DENOISE_DIR}/rep-seqs.qza" ]]; then
     qiime feature-table tabulate-seqs \
       --i-data "${DENOISE_DIR}/rep-seqs.qza" \
       --o-visualization "${DENOISE_DIR}/rep-seqs.qzv"
 fi
 
-if [ -e "${DENOISE_DIR}/table.qza" ]; then
+if [[ ! -e "${DENOISE_DIR}/table" && -e "${DENOISE_DIR}/table.qza" ]]; then
     qiime tools export \
       --input-path "${DENOISE_DIR}/table.qza" \
       --output-path "${DENOISE_DIR}/table"
@@ -177,13 +180,13 @@ if [ ! -e "${DENOISE_DIR}/taxonomy.qza" ]; then
       --o-classification "${DENOISE_DIR}/taxonomy.qza"
 fi
 
-if [ -e "${DENOISE_DIR}/taxonomy.qza" ]; then
+if [[ ! -e "${DENOISE_DIR}/taxonomy.qzv" && -e "${DENOISE_DIR}/taxonomy.qza" ]]; then
     qiime metadata tabulate \
       --m-input-file "${DENOISE_DIR}/taxonomy.qza" \
       --o-visualization "${DENOISE_DIR}/taxonomy.qzv"
 fi
 
-if [ -e "${DENOISE_DIR}/taxonomy.qza" ]; then
+if [[ ! -e  "${DENOISE_DIR}/taxonomy" && -e "${DENOISE_DIR}/taxonomy.qza" ]]; then
     qiime tools export \
       --input-path "${DENOISE_DIR}/taxonomy.qza" \
       --output-path "${DENOISE_DIR}/taxonomy"
@@ -233,9 +236,11 @@ if [ ! -e "${METRIC_DIR}/faith_pd_vector.qza" ]; then
       --o-alpha-diversity "${METRIC_DIR}/faith_pd_vector.qza"
 fi
 
-qiime tools export \
-  --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
-  --output-path "${METRIC_DIR}/faith"
+if [[ ! -e "${METRIC_DIR}/faith" && -e "${METRIC_DIR}/faith_pd_vector.qza" ]]; then
+    qiime tools export \
+      --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
+      --output-path "${METRIC_DIR}/faith"
+fi
 
 #Get an error here, something about "Data non-symmetric and/or contains NaNs"
 
@@ -273,3 +278,8 @@ if [ ! -e "${DENOISE_DIR}/table/feature-table.tsv" ]; then
       -o "${DENOISE_DIR}/table/feature-table.tsv" \
       --to-tsv
 fi
+
+echo "****"
+echo "Done!"
+echo "If nothing happened,"
+echo "You may already have result files, check your directories!"
