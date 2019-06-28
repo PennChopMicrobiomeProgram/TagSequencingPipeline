@@ -1,15 +1,27 @@
 ---
 title: "Basic Bioinformatics Overview"
-author: "PennCHOP Microbiome Program"
+author: "Scott G. Daniel, PennCHOP Microbiome Program"
 date: \today
 output: 
     pdf_document:
-        keep_tex: true
+        keep_tex: false
+        toc: true
+        toc_depth: 3
+        includes:
+            in_header: ~/TeX_packages_commands.sty
 ---
 
 <!-- ================================================================================================ -->
 <!--   Beginning of Preamble : Preamble seldom requires change                                        -->
 <!-- ================================================================================================ -->
+
+<!-- Notes -->
+```{r eval=FALSE, include=FALSE}
+#notes
+#neat: you can run this following command in the console to give your reports custom names (or date-stamp them)
+#rmarkdown::render('ronen_stein_Report_shotgun.Rmd',output_file = paste('CEASE.report.', Sys.Date(), '.pdf', sep=''))
+```
+<!-- ===== -->
 
 <!-- knitr setup -->
 ```{r knitr setup, echo=FALSE}
@@ -19,7 +31,7 @@ output:
 library(knitr)
 opts_chunk$set(
   tidy=FALSE,
-  cache=FALSE,
+  cache=TRUE,
   echo=FALSE,
   warning=FALSE,
   message=FALSE,
@@ -35,18 +47,33 @@ opts_chunk$set(
 ### ================
 ###   R packages
 ### ================
+#This package will also help us more easily manipulate our data
 library(dplyr)
 library(magrittr)
 library(qiimer)
 library(pander)
+#Analyses of Phylogenetics and Evolution package. Required for tree calculations to be used with phyloseq
 library(ape)
+#The vegan package provides tools for descriptive community ecology. It has most basic functions of diversity analysis, community ordination and dissimilarity analysis. In general, this package is used for Bray-Curtis and Jaccard analyses.
 library(vegan)
+#Graphing package used in phyloseq. To edit the default setting of a plot, you need to use functions in this package.
 library(ggplot2)
+#This package is used to calculate and plot Venn diagrams as well as heatmaps
+library(gplots)
 library(pheatmap)
+#This package will help us more easily manipulate our data, which are matrices
 library(tidyr)
 library(usedist)
 library(readr)
 library(tibble)
+#Linear mixed-effects models like repeated measures analysis
+library(lme4)
+#used to read in mothur-formatted files
+library(phangorn)
+#The phyloseq package seeks to address issues with multiple microbiome analysis packages by providing a set of functions that internally manage the organizing, linking, storing, and analyzing of phylogenetic sequencing data. In general, this package is used for UniFrac analyses.
+library(phyloseq)
+#Pretty Venn disgrams
+library(VennDiagram)
 ```
 
 <!-- resources -->
@@ -161,23 +188,27 @@ richness_subsample_size <- 1000
 ### number of samples threshold to show heatmap on the page
 sample_threshold <- 100
 
+### setwd
+#fill in your project dir
+root_dir = "/Volumes/microbiome/analysis/[username]/[investigator_project_name]"
+
 ### mapping file path
-mapping_file_fp <- file.path("mapping_file.txt")
+mapping_file_fp <- file.path(root_dir, "mapping_file.tsv")
 
 ### otu table file path
-feature_table_fp <- file.path("denoising-results", "table", "feature-table.tsv")
+feature_table_fp <- file.path(root_dir, "denoising_results", "table", "feature-table.tsv")
 
 ### taxonomic assignment 
-taxo_assignment_fp <- file.path("denoising-results", "taxonomy", "taxonomy.tsv")
+taxo_assignment_fp <- file.path(root_dir, "denoising_results", "taxonomy", "taxonomy.tsv")
 
 ### unweighted UniFrac file path
-uu_fp <- file.path("core-metrics-results", "uu", "distance-matrix.tsv")
+uu_fp <- file.path(root_dir, "core_metrics_results", "uu", "distance-matrix.tsv")
 
 ### weighted UniFrac file path
-wu_fp <- file.path("core-metrics-results", "wu", "distance-matrix.tsv")
+wu_fp <- file.path(root_dir, "core_metrics_results", "wu", "distance-matrix.tsv")
 
 ### faith
-faith_fp <- file.path("core-metrics-results", "faith", "alpha-diversity.tsv")
+faith_fp <- file.path(root_dir, "core_metrics_results", "faith", "alpha-diversity.tsv")
 ```
 
 ```{r, warning=F}
@@ -216,9 +247,11 @@ s <- merge(s, read_counts, by="SampleID", all.x=T) %>%
   mutate(Keep = Read_Counts > min_reads) %>%
   mutate(isControl = grepl("geneblock|freewater|extract", SampleID, ignore.case = TRUE))
 
+#trun_taxon perl expression is to get rid of trailing "; s__" since it doesn't add any new information
+
 ### taxonomic assignment
 ta <- read_delim(file=taxo_assignment_fp, delim="\t") %>%
-  mutate(trunc_taxon = sub("(; [kpcofgs]__)+$", "", Taxon, perl=T)) %>%
+  mutate(trunc_taxon = sub('(; [kpcofgs]__)+$', "", Taxon, perl=T)) %>%
   arrange(order(match(rownames(counts), `Feature ID`)))
 
 ### check if the order of the assignments and the order of featue table is the same
@@ -243,9 +276,18 @@ a <- simplify_assignments(adf, rank1="Phylum", rank2="Genus")
 names(a) <- ta$`Feature ID`
 summed_cts <- rowsum(counts, a) 
 summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/")
+
+#if we want all the otus
+# all_otus <- counts %>%
+#   merge(ta[,c("Feature ID","Confidence","trunc_taxon")], by.x="row.names", by.y="Feature ID", all.x=T) %>%
+#   dplyr::rename(Taxon = trunc_taxon) %>%
+#   dplyr::rename(`Feature ID` = Row.names)
+# 
+# write.csv(x = all_otus, file = "all_otus.csv", row.names = F)
+
 ```
 
-```{r}
+```{r, Samples error check 1}
 ### ===========================
 ###   check for missing samples
 ### ===========================
@@ -258,7 +300,10 @@ s_missing <- s %>%
 if (any(!s_missing$isControl)) {
   pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
 }
+```
 
+
+```{r, Samples error check 2}
 ### possible issue 2: Samples found in the feature table but not in the sample sheet. There must be an error!
 in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
 if (length(in_counts_not_in_s) > 0) {
@@ -268,16 +313,16 @@ if (length(in_counts_not_in_s) > 0) {
 s[s$SampleID %in% s_missing$SampleID, "Keep"] <- FALSE
 ```
 
-```{r}
+```{r, warning=F}
 ### ===========================
 ###   calculate / read in alpha diversity
 ### ===========================
 
 faith <- read.delim(file=faith_fp, stringsAsFactors = F) %>%
   dplyr::rename(SampleID=X)
-
+# dplyr::filter(!isControl) %>%
 s <- s %>%
-  merge(diversity(t(counts)), by.x="SampleID", by.y="row.names", all.x=T) %>%
+  merge(vegan::diversity(t(counts)), by.x="SampleID", by.y="row.names", all.x=T) %>%
   dplyr::rename(shannon = y) %>%
   merge(rarefy(t(counts), richness_subsample_size), by.x="SampleID", by.y="row.names", all.x=T) %>%
   dplyr::rename(richness = y) %>%
@@ -296,6 +341,7 @@ all_dates <- as.character(unique(s$run_start_date))
 run_date <- paste(lapply(all_dates, change_data_format), collapse=', ')
 
 investigator <- paste(unique(s$investigators), collapse = ", ")
+investigator <- ""
 ```
 
 # Introduction
@@ -304,7 +350,7 @@ This report is based on the results of sequencing performed on `r run_date` for 
 ## Histogram of high quality paired reads per sample
 The black dashed vertical line shows the minimum number of reads (`r min_reads`) for analysis. Control samples, if any, were included in the histogram.
 
-```{r, fig.width=6, fig.height=4}
+```{r, fig.width=6, fig.height=4, warning=F}
 ggplot(s, aes(x=Read_Counts)) +
     geom_histogram(aes(fill=SampleType), binwidth=1000) +
     geom_vline(xintercept = min_reads, color="black", linetype="dashed") +
@@ -352,6 +398,7 @@ if (dim(s_toPlot)[1] > sample_threshold) {
 } else {
   heatmap_grouped(props_toPlot, s_toPlot, grps=grps, thre=0.01, option=2, prop_cut = prop_cut, satu_limit=satu_limit)
 }
+
 ```
 
 \newpage
@@ -475,12 +522,3 @@ hc = hclust(dist_in, method="average")
 plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
 ```
 
-\newpage
-
-# APPENDIX: Counts of high quality paired reads for each sample
-```{r}
-s %>% 
-  select(SampleID, Read_Counts, final_library_concentration_ng_ul) %>% 
-  arrange(-Read_Counts) %>% 
-  pander()
-```

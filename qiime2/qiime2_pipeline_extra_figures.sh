@@ -1,5 +1,4 @@
-#!/usr/bin/env bash
-
+#!/bin/bash
 set -x
 set -e
 #set -u
@@ -9,7 +8,7 @@ conda activate qiime2-2018.11
 
 if [ $# -ne 1 ]; then
 	echo "Usage: $0 MAPPING_FP"
-    echo "MAPPING_FP is the mapping file for Qiime2"
+    echo "MAPPING_FP is the mapping file for Qimme2"
     echo "Data files should be in a directory named "data_files""
 	exit 1
 fi
@@ -17,28 +16,28 @@ fi
 MAPPING_FP=$1
 WORK_DIR="$(dirname ${MAPPING_FP})"
 
-# See https://www.ostricher.com/2014/10/the-right-way-to-get-the-directory-of-a-bash-script/
-SOURCE_REL="${BASH_SOURCE[0]}"
-SOURCE_ABS=$(readlink -f "${SOURCE_REL}")
-SOURCE_DIR=$(dirname "${SOURCE_ABS}")
+#SOURCE_REL="${BASH_SOURCE[0]}"
+#SOURCE_ABS=$(readlink -f "${SOURCE_REL}")
+#SOURCE_DIR=$(dirname "${SOURCE_ABS}")
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
-INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/combine_barcodes.py"
+INDEX1_INDEX2_COMBINE_SCRIPT="${WORK_DIR}/combine_barcodes.py"
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
-## These can be downloaded from https://data.qiime2.org/2017.9/common/gg-13-8-99-nb-classifier.qza (full length)
-## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
+## These can be downloaded from https://data.qiime2.org/2018.11/common/gg-13-8-99-nb-classifier.qza (full length)
+## or https://data.qiime2.org/2018.11/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
-#CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
-CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
+CLASSIFIER_FP="${WORK_DIR}/scikit-learn0.19.1-gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
+#CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
-EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp_paired_end_sequences"
+EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp-paired-end-sequences"
 DATA_DIR="${WORK_DIR}/data_files"
-DEMUX_DIR="${WORK_DIR}/demux_results"
-DENOISE_DIR="${WORK_DIR}/denoising_results"
-METRIC_DIR="${WORK_DIR}/core_metrics_results"
+DEMUX_DIR="${WORK_DIR}/demux-results"
+DENOISE_DIR="${WORK_DIR}/denoising-results"
+METRIC_DIR="${WORK_DIR}/core-metrics-results"
+EXTRAS_DIR="${WORK_DIR}/extras"
 
 ###=====================
 ### gunzip INDEX1 AND INDEX2, IF NECESSARY
@@ -121,7 +120,7 @@ if [ ! -e "${DEMUX_DIR}/demux.qzv" ]; then
       --o-visualization "${DEMUX_DIR}/demux.qzv"
 fi
 
-if [[ ! -e "${DEMUX_DIR}/demux" && -e "${DEMUX_DIR}/demux.qzv" ]]; then
+if [[ ( -e "${DEMUX_DIR}/demux.qzv" ) && ( ! -d "${DEMUX_DIR}/demux" ) ]]; then
     qiime tools export \
       --input-path "${DEMUX_DIR}/demux.qzv" \
       --output-path "${DEMUX_DIR}/demux"
@@ -150,20 +149,26 @@ if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
       --o-table "${DENOISE_DIR}/table.qza"
 fi
 
-if [[ ! -e  "${DENOISE_DIR}/table.qzv" && -e "${DENOISE_DIR}/table.qza" ]]; then
+if [[ ( -e "${DENOISE_DIR}/table.qza" ) && ( ! -e "${DENOISE_DIR}/table.qzv" ) ]]; then
     qiime feature-table summarize \
       --i-table "${DENOISE_DIR}/table.qza" \
       --o-visualization "${DENOISE_DIR}/table.qzv" \
       --m-sample-metadata-file ${MAPPING_FP}
 fi
 
-if [[ ! -e "${DENOISE_DIR}/rep-seqs.qzv" && -e "${DENOISE_DIR}/rep-seqs.qza" ]]; then
+if [[ ( -e "${DENOISE_DIR}/rep-seqs.qza" ) && ( ! -e "${DENOISE_DIR}/rep-seqs.qzv" ) ]]; then
     qiime feature-table tabulate-seqs \
       --i-data "${DENOISE_DIR}/rep-seqs.qza" \
       --o-visualization "${DENOISE_DIR}/rep-seqs.qzv"
 fi
 
-if [[ ! -e "${DENOISE_DIR}/table" && -e "${DENOISE_DIR}/table.qza" ]]; then
+if [[ ( -e "${DENOISE_DIR}/table.qzv" ) && ( ! -d "${DENOISE_DIR}/table" ) ]]; then
+    qiime tools export \
+      --input-path "${DENOISE_DIR}/table.qzv" \
+      --output-path "${DENOISE_DIR}/table"
+fi
+
+if [[ ( -e "${DENOISE_DIR}/table.qza" ) && ( ! -e "${DENOISE_DIR}/table/feature-table.biom" ) ]]; then
     qiime tools export \
       --input-path "${DENOISE_DIR}/table.qza" \
       --output-path "${DENOISE_DIR}/table"
@@ -180,13 +185,13 @@ if [ ! -e "${DENOISE_DIR}/taxonomy.qza" ]; then
       --o-classification "${DENOISE_DIR}/taxonomy.qza"
 fi
 
-if [[ ! -e "${DENOISE_DIR}/taxonomy.qzv" && -e "${DENOISE_DIR}/taxonomy.qza" ]]; then
+if [[ ( -e "${DENOISE_DIR}/taxonomy.qza" ) && ( ! -e "${DENOISE_DIR}/taxonomy.qzv" ) ]]; then
     qiime metadata tabulate \
       --m-input-file "${DENOISE_DIR}/taxonomy.qza" \
       --o-visualization "${DENOISE_DIR}/taxonomy.qzv"
 fi
 
-if [[ ! -e  "${DENOISE_DIR}/taxonomy" && -e "${DENOISE_DIR}/taxonomy.qza" ]]; then
+if [[ ( -e "${DENOISE_DIR}/taxonomy.qza" ) && ( ! -d "${DENOISE_DIR}/taxonomy" ) ]]; then
     qiime tools export \
       --input-path "${DENOISE_DIR}/taxonomy.qza" \
       --output-path "${DENOISE_DIR}/taxonomy"
@@ -228,21 +233,54 @@ if [ ! -d ${METRIC_DIR} ]; then
         mkdir ${METRIC_DIR}
 fi
 
+if [ ! -e "${METRIC_DIR}/simpson/simpson_alpha.qza" ]; then
+    
+    qiime diversity alpha \
+      --p-metric simpson_e \
+      --i-table "${DENOISE_DIR}/table.qza" \
+      --o-alpha-diversity "${METRIC_DIR}/simpson/simpson_alpha.qza"
+
+fi
+
+if [[ ( -e "${METRIC_DIR}/simpson/simpson_alpha.qza" ) && ( ! -e "${METRIC_DIR}/simpson/alpha-group-signf-simpson.qzv" ) ]]; then
+    
+qiime diversity alpha-group-significance \
+    --i-alpha-diversity "${METRIC_DIR}/simpson/simpson_alpha.qza" \
+    --m-metadata-file "${MAPPING_FP}" \
+    --o-visualization "${METRIC_DIR}/simpson/alpha-group-signf-simpson.qzv"
+fi
+
+
+#Taking care of these with command at bottom
+
 if [ ! -e "${METRIC_DIR}/faith_pd_vector.qza" ]; then
+    
     qiime diversity alpha-phylogenetic \
       --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
       --i-table "${DENOISE_DIR}/table.qza" \
       --p-metric faith_pd \
       --o-alpha-diversity "${METRIC_DIR}/faith_pd_vector.qza"
-fi
 
-if [[ ! -e "${METRIC_DIR}/faith" && -e "${METRIC_DIR}/faith_pd_vector.qza" ]]; then
     qiime tools export \
       --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
       --output-path "${METRIC_DIR}/faith"
-fi
 
-#Get an error here, something about "Data non-symmetric and/or contains NaNs"
+fi
+#
+#if [ ! -e "${METRIC_DIR}/shannon.qza" ]; then
+#    
+#    qiime diversity alpha-phylogenetic \
+#      --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+#      --i-table "${DENOISE_DIR}/table.qza" \
+#      --p-metric shannon \
+#      --o-alpha-diversity "${METRIC_DIR}/shannon.qza"
+#
+#    qiime tools export \
+#      --input-path "${METRIC_DIR}/shannon.qza" \
+#      --output-path "${METRIC_DIR}/shannon"
+#
+#fi
+#
 
 if [ ! -e "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" ]; then
     qiime diversity beta-phylogenetic \
@@ -268,8 +306,9 @@ qiime tools export \
   --input-path "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
   --output-path "${METRIC_DIR}/uu"
 
+
 ###=====================
-###  BIOM CONVERT
+###  BIOM CONVERT and OTHER
 ###=====================
 
 if [ ! -e "${DENOISE_DIR}/table/feature-table.tsv" ]; then
@@ -279,7 +318,33 @@ if [ ! -e "${DENOISE_DIR}/table/feature-table.tsv" ]; then
       --to-tsv
 fi
 
-echo "****"
-echo "Done!"
-echo "If nothing happened,"
-echo "You may already have result files, check your directories!"
+if [[ ! -d ${EXTRAS_DIR} ]]; then
+
+    mkdir -p ${EXTRAS_DIR}
+
+fi
+
+
+if [ ! -e "${DENOISE_DIR}/taxa_barplot/barplot.qzv" ]; then
+    qiime taxa barplot \
+        --i-table "${DENOISE_DIR}/table.qza" \
+        --i-taxonomy "${DENOISE_DIR}/taxonomy.qza" \
+        --m-metadata-file ${MAPPING_FP} \
+        --o-visualization "${EXTRAS_DIR}/taxa_barplot/barplot.qzv"
+fi
+
+qiime diversity core-metrics-phylogenetic \
+      --p-sampling-depth 1000 \
+      --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+      --i-table "${DENOISE_DIR}/table.qza" \
+      --m-metadata-file "${MAPPING_FP}" \
+      --p-n-jobs 12 \
+      --o-observed-otus-vector "${EXTRAS_DIR}/obs_otus.qza" \
+      --output-dir "${EXTRAS_DIR}/core-metrics-phylogenetic"
+
+qiime diversity alpha-group-significance \
+    --i-alpha-diversity "${EXTRAS_DIR}/obs_otus.qza" \
+    --m-metadata-file "${MAPPING_FP}" \
+    --output-dir "${EXTRAS_DIR}/alpha-group-signf-otus"
+
+

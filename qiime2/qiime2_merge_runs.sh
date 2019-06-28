@@ -13,25 +13,33 @@ DIR2=$2
 DIR_OUT=$3
 
 
-DENOISE_DIR="denoising-results"
-METRIC_DIR="${DIR_OUT}/core-metrics-results"
 
-mkdir "${DIR_OUT}"
-mkdir "${DIR_OUT}/${DENOISE_DIR}"
+DENOISE_DIR="denoising_results"
+METRIC_DIR="${DIR_OUT}/core_metrics_results"
+
+mkdir -p "${DIR_OUT}"
+mkdir -p "${DIR_OUT}/${DENOISE_DIR}"
+
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
 ## These can be downloaded from https://data.qiime2.org/2017.9/common/gg-13-8-99-nb-classifier.qza (full length)
 ## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
-CLASSIFIER_FP="/home/tanesc/code/qiime2code/training-feature-classifiers/gg-13-8-99-nb-classifier.qza"
+
+#CLASSIFIER_FP="/home/tanesc/code/qiime2code/training-feature-classifiers/gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="${HOME}/gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
 #CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
+CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
 ###===============
 ###  MERGE FILES 
 ###===============
+
+
+#NOtE: if you have duplicate sample-ids you can use a trick here to rename them without running an entire pipeline again:
+#https://forum.qiime2.org/t/change-sample-ids-after-running-dada2/3918/3
 
 qiime feature-table merge \
       --i-table1 "${DIR1}/${DENOISE_DIR}/table.qza" \
@@ -40,13 +48,12 @@ qiime feature-table merge \
 
 
 qiime tools export \
-      "${DIR_OUT}/${DENOISE_DIR}/table.qza" \
-      --output-dir "${DIR_OUT}/${DENOISE_DIR}/table"
+      --input-path "${DIR_OUT}/${DENOISE_DIR}/table.qza" \
+      --output-path "${DIR_OUT}/${DENOISE_DIR}/table"
 
 
-qiime feature-table merge-seq-data \
-      --i-data1 "${DIR1}/${DENOISE_DIR}/rep-seqs.qza" \
-      --i-data2 "${DIR2}/${DENOISE_DIR}/rep-seqs.qza" \
+qiime feature-table merge-seqs \
+      --i-data "${DIR1}/${DENOISE_DIR}/rep-seqs.qza" --i-data "${DIR2}/${DENOISE_DIR}/rep-seqs.qza" \
       --o-merged-data "${DIR_OUT}/${DENOISE_DIR}/rep-seqs.qza"
 
 
@@ -64,8 +71,8 @@ qiime metadata tabulate \
       --o-visualization "${DIR_OUT}/${DENOISE_DIR}/taxonomy.qzv"
 
 qiime tools export \
-      "${DIR_OUT}/${DENOISE_DIR}/taxonomy.qza" \
-        --output-dir "${DIR_OUT}/${DENOISE_DIR}/taxonomy"
+      --input-path "${DIR_OUT}/${DENOISE_DIR}/taxonomy.qza" \
+      --output-path "${DIR_OUT}/${DENOISE_DIR}/taxonomy"
 
 
 
@@ -96,7 +103,7 @@ qiime phylogeny midpoint-root \
 ###=====================
 
 if [ ! -d ${METRIC_DIR} ]; then
-    mkdir ${METRIC_DIR}
+    mkdir -p ${METRIC_DIR}
 fi
 
 qiime diversity alpha-phylogenetic \
@@ -106,8 +113,8 @@ qiime diversity alpha-phylogenetic \
       --o-alpha-diversity "${METRIC_DIR}/faith_pd_vector.qza"
 
 qiime tools export \
-      "${METRIC_DIR}/faith_pd_vector.qza" \
-      --output-dir "${METRIC_DIR}/faith"
+      --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
+      --output-path "${METRIC_DIR}/faith"
 
 qiime diversity beta-phylogenetic \
       --i-phylogeny "${DIR_OUT}/${DENOISE_DIR}/rooted-tree.qza" \
@@ -116,8 +123,8 @@ qiime diversity beta-phylogenetic \
       --o-distance-matrix "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza"
 
 qiime tools export \
-      "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
-      --output-dir "${METRIC_DIR}/wu"
+      --input-path "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" \
+      --output-path "${METRIC_DIR}/wu"
 
 qiime diversity beta-phylogenetic \
       --i-phylogeny "${DIR_OUT}/${DENOISE_DIR}/rooted-tree.qza" \
@@ -126,8 +133,9 @@ qiime diversity beta-phylogenetic \
       --o-distance-matrix "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza"
 
 qiime tools export \
-      "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
-      --output-dir "${METRIC_DIR}/uu"
+      --input-path "${METRIC_DIR}/unweighted_unifrac_distance_matrix.qza" \
+      --output-path "${METRIC_DIR}/uu"
+
 
 
 
