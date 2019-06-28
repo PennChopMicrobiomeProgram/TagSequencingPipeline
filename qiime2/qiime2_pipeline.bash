@@ -4,8 +4,8 @@ set -x
 set -e
 #set -u
 
-source ~/.bashrc
-conda activate qiime2-2018.11
+#source ~/.bashrc
+#conda activate qiime2-2018.11
 
 if [ $# -ne 1 ]; then
 	echo "Usage: $0 MAPPING_FP"
@@ -23,16 +23,16 @@ SOURCE_ABS=$(readlink -f "${SOURCE_REL}")
 SOURCE_DIR=$(dirname "${SOURCE_ABS}")
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
-INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/combine_barcodes.py"
+INDEX1_INDEX2_COMBINE_SCRIPT="$(dirname ${SOURCE_DIR})/combine_barcodes.py"
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
 ## These can be downloaded from https://data.qiime2.org/2017.9/common/gg-13-8-99-nb-classifier.qza (full length)
 ## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
-#CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
+CLASSIFIER_FP="gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
-CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
+#CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
 EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp_paired_end_sequences"
 DATA_DIR="${WORK_DIR}/data_files"
@@ -77,6 +77,7 @@ FWD="${DATA_DIR}/Undetermined_S0_L001_R1_001.fastq.gz"
 REV="${DATA_DIR}/Undetermined_S0_L001_R2_001.fastq.gz"
 IDX="${DATA_DIR}/barcodes.fastq.gz"
 
+
 ###=====================
 ### DATA IMPORT
 ###=====================
@@ -102,28 +103,24 @@ fi
 ### DEMULTIPLEXING SEQUENCE
 ###=====================
 
-if [ ! -d ${DEMUX_DIR} ]; then
-        mkdir ${DEMUX_DIR}
-fi
-
-if [ ! -e "${DEMUX_DIR}/demux.qza" ]; then
+if [ ! -e "${DEMUX_DIR}/per_sample_sequences.qza" ]; then
     qiime demux emp-paired \
       --m-barcodes-file ${MAPPING_FP} \
       --m-barcodes-column BarcodeSequence \
       --i-seqs "${WORK_DIR}/emp-paired-end-sequences.qza" \
       --p-rev-comp-mapping-barcodes \
-      --o-per-sample-sequences "${DEMUX_DIR}/demux.qza"
+      --output-dir "${DEMUX_DIR}"
 fi
 
-if [ ! -e "${DEMUX_DIR}/demux.qzv" ]; then
+if [ ! -e "${DEMUX_DIR}/per_sample_sequences.qzv" ]; then
     qiime demux summarize \
-      --i-data "${DEMUX_DIR}/demux.qza" \
-      --o-visualization "${DEMUX_DIR}/demux.qzv"
+      --i-data "${DEMUX_DIR}/per_sample_sequences.qza" \
+      --o-visualization "${DEMUX_DIR}/per_sample_sequences.qzv"
 fi
 
-if [[ ! -e "${DEMUX_DIR}/demux" && -e "${DEMUX_DIR}/demux.qzv" ]]; then
+if [[ ! -e "${DEMUX_DIR}/demux" && -e "${DEMUX_DIR}/per_sample_sequences.qzv" ]]; then
     qiime tools export \
-      --input-path "${DEMUX_DIR}/demux.qzv" \
+      --input-path "${DEMUX_DIR}/per_sample_sequences.qzv" \
       --output-path "${DEMUX_DIR}/demux"
 fi
 
@@ -139,14 +136,14 @@ fi
 
 if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
     qiime dada2 denoise-paired \
-      --i-demultiplexed-seqs "${DEMUX_DIR}/demux.qza" \
+      --i-demultiplexed-seqs "${DEMUX_DIR}/per_sample_sequences.qza" \
       --p-trim-left-f 0 \
       --p-trunc-len-f 230 \
       --p-trim-left-r 0 \
       --p-trunc-len-r 230 \
       --p-n-threads 8 \
       --o-representative-sequences "${DENOISE_DIR}/rep-seqs.qza" \
-      --o-denoising-stats "${DENOISE_DIR}/denoising-stats.txt" \
+      --o-denoising-stats "${DENOISE_DIR}/denoising-stats.qza" \
       --o-table "${DENOISE_DIR}/table.qza"
 fi
 
@@ -168,6 +165,13 @@ if [[ ! -e "${DENOISE_DIR}/table" && -e "${DENOISE_DIR}/table.qza" ]]; then
       --input-path "${DENOISE_DIR}/table.qza" \
       --output-path "${DENOISE_DIR}/table"
 fi
+
+if [[ ! -e "${DENOISE_DIR}/denoising-stats" && -e "${DENOISE_DIR}/denoising-stats.qza" ]]; then
+    qiime tools export \
+	  --input-path "${DENOISE_DIR}/denoising-stats.qza" \
+	  --output-path "${DENOISE_DIR}/denoising-stats"
+fi
+
 
 ###=====================
 ###  TAXONOMIC ANALYSIS
