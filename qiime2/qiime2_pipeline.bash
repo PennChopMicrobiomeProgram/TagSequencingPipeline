@@ -39,6 +39,7 @@ DATA_DIR="${WORK_DIR}/data_files"
 DEMUX_DIR="${WORK_DIR}/demux_results"
 DENOISE_DIR="${WORK_DIR}/denoising_results"
 METRIC_DIR="${WORK_DIR}/core_metrics_results"
+EXTRAS_DIR="${WORK_DIR}/extras"
 
 ###=====================
 ### gunzip INDEX1 AND INDEX2, IF NECESSARY
@@ -289,7 +290,43 @@ if [ ! -e "${DENOISE_DIR}/table/feature-table.tsv" ]; then
       --to-tsv
 fi
 
+###=====================
+###  ADDITIONAL FIGURES
+###=====================
+
+
+#if [ ! -d "${EXTRAS_DIR}/taxa_barplot" ]; then
+#    qiime taxa barplot \
+#      --i-table "${DENOISE_DIR}/table.qza" \
+#      --i-taxonomy "${DENOISE_DIR}/taxonomy.qza" \
+#      --m-metadata-file ${MAPPING_FP} \
+#      --output-dir "${EXTRAS_DIR}/taxa_barplot"
+#fi
+
+
+#if [ ! -d "${EXTRAS_DIR}/core-metrics-phylogenetic" ]; then
+#qiime diversity core-metrics-phylogenetic \
+#      --p-sampling-depth 1000 \
+#      --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+#      --i-table "${DENOISE_DIR}/table.qza" \
+#      --m-metadata-file "${MAPPING_FP}" \
+#      --p-n-jobs 8 \
+#      --o-observed-otus-vector "${EXTRAS_DIR}/obs_otus.qza" \
+#      --output-dir "${EXTRAS_DIR}/core-metrics-phylogenetic"
+#fi
+
+#if [ ! -d "${EXTRAS_DIR}/alpha-group-signf-otus" ]; then
+#qiime diversity alpha-group-significance \
+#      --i-alpha-diversity "${EXTRAS_DIR}/obs_otus.qza" \
+#      --m-metadata-file "${MAPPING_FP}" \
+#      --output-dir "${EXTRAS_DIR}/alpha-group-signf-otus"
+#fi
+
+
 echo "****"
 echo "Done!"
 echo "If nothing happened,"
 echo "You may already have result files, check your directories!"
+
+
+
