@@ -134,7 +134,7 @@ fi
 
 ## discussion needed for denosing parameters below
 
-if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
+if [ ! -e "${DENOISE_DIR}/table_main.qza" ]; then
     qiime dada2 denoise-paired \
       --i-demultiplexed-seqs "${DEMUX_DIR}/per_sample_sequences.qza" \
       --p-trim-left-f 0 \
@@ -144,7 +144,15 @@ if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
       --p-n-threads 8 \
       --o-representative-sequences "${DENOISE_DIR}/rep-seqs.qza" \
       --o-denoising-stats "${DENOISE_DIR}/denoising-stats.qza" \
-      --o-table "${DENOISE_DIR}/table.qza"
+      --o-table "${DENOISE_DIR}/table_main.qza"
+fi
+
+# filter out the samples with no featured from the table
+if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
+    qiime feature-table filter-samples \
+      --i-table "${DENOISE_DIR}/table_main.qza" \
+      --p-min-frequency 1 \
+      --o-filtered-table "${DENOISE_DIR}/table.qza"
 fi
 
 if [[ ! -e  "${DENOISE_DIR}/table.qzv" && -e "${DENOISE_DIR}/table.qza" ]]; then
@@ -245,8 +253,6 @@ if [[ ! -e "${METRIC_DIR}/faith" && -e "${METRIC_DIR}/faith_pd_vector.qza" ]]; t
       --input-path "${METRIC_DIR}/faith_pd_vector.qza" \
       --output-path "${METRIC_DIR}/faith"
 fi
-
-#Get an error here, something about "Data non-symmetric and/or contains NaNs"
 
 if [ ! -e "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" ]; then
     qiime diversity beta-phylogenetic \
