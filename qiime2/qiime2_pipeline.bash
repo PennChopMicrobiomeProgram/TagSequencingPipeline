@@ -110,6 +110,7 @@ if [ ! -e "${DEMUX_DIR}/per_sample_sequences.qza" ]; then
       --m-barcodes-column BarcodeSequence \
       --i-seqs "${WORK_DIR}/emp-paired-end-sequences.qza" \
       --p-rev-comp-mapping-barcodes \
+      --p-no-golay-error-correction \
       --output-dir "${DEMUX_DIR}"
 fi
 
