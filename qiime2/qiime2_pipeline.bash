@@ -4,8 +4,8 @@ set -x
 set -e
 #set -u
 
-source ~/.bashrc
-conda activate qiime2-2018.11
+#source ~/.bashrc
+#conda activate qiime2-2018.11
 
 if [ $# -ne 1 ]; then
 	echo "Usage: $0 MAPPING_FP"
@@ -23,22 +23,23 @@ SOURCE_ABS=$(readlink -f "${SOURCE_REL}")
 SOURCE_DIR=$(dirname "${SOURCE_ABS}")
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
-INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/combine_barcodes.py"
+INDEX1_INDEX2_COMBINE_SCRIPT="$(dirname ${SOURCE_DIR})/combine_barcodes.py"
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
 ## These can be downloaded from https://data.qiime2.org/2017.9/common/gg-13-8-99-nb-classifier.qza (full length)
 ## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
-#CLASSIFIER_FP="${HOME}/gg-13-8-99-nb-classifier.qza"
+CLASSIFIER_FP="gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
-CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
+#CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
 EMP_PAIRED_END_SEQUENCES_DIR="${WORK_DIR}/emp_paired_end_sequences"
 DATA_DIR="${WORK_DIR}/data_files"
 DEMUX_DIR="${WORK_DIR}/demux_results"
 DENOISE_DIR="${WORK_DIR}/denoising_results"
 METRIC_DIR="${WORK_DIR}/core_metrics_results"
+EXTRAS_DIR="${WORK_DIR}/extras"
 
 ###=====================
 ### gunzip INDEX1 AND INDEX2, IF NECESSARY
@@ -77,6 +78,7 @@ FWD="${DATA_DIR}/Undetermined_S0_L001_R1_001.fastq.gz"
 REV="${DATA_DIR}/Undetermined_S0_L001_R2_001.fastq.gz"
 IDX="${DATA_DIR}/barcodes.fastq.gz"
 
+
 ###=====================
 ### DATA IMPORT
 ###=====================
@@ -102,28 +104,25 @@ fi
 ### DEMULTIPLEXING SEQUENCE
 ###=====================
 
-if [ ! -d ${DEMUX_DIR} ]; then
-        mkdir ${DEMUX_DIR}
-fi
-
-if [ ! -e "${DEMUX_DIR}/demux.qza" ]; then
+if [ ! -e "${DEMUX_DIR}/per_sample_sequences.qza" ]; then
     qiime demux emp-paired \
       --m-barcodes-file ${MAPPING_FP} \
       --m-barcodes-column BarcodeSequence \
       --i-seqs "${WORK_DIR}/emp-paired-end-sequences.qza" \
       --p-rev-comp-mapping-barcodes \
-      --o-per-sample-sequences "${DEMUX_DIR}/demux.qza"
+      --p-no-golay-error-correction \
+      --output-dir "${DEMUX_DIR}"
 fi
 
-if [ ! -e "${DEMUX_DIR}/demux.qzv" ]; then
+if [ ! -e "${DEMUX_DIR}/per_sample_sequences.qzv" ]; then
     qiime demux summarize \
-      --i-data "${DEMUX_DIR}/demux.qza" \
-      --o-visualization "${DEMUX_DIR}/demux.qzv"
+      --i-data "${DEMUX_DIR}/per_sample_sequences.qza" \
+      --o-visualization "${DEMUX_DIR}/per_sample_sequences.qzv"
 fi
 
-if [[ ! -e "${DEMUX_DIR}/demux" && -e "${DEMUX_DIR}/demux.qzv" ]]; then
+if [[ ! -e "${DEMUX_DIR}/demux" && -e "${DEMUX_DIR}/per_sample_sequences.qzv" ]]; then
     qiime tools export \
-      --input-path "${DEMUX_DIR}/demux.qzv" \
+      --input-path "${DEMUX_DIR}/per_sample_sequences.qzv" \
       --output-path "${DEMUX_DIR}/demux"
 fi
 
@@ -137,17 +136,25 @@ fi
 
 ## discussion needed for denosing parameters below
 
-if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
+if [ ! -e "${DENOISE_DIR}/table_main.qza" ]; then
     qiime dada2 denoise-paired \
-      --i-demultiplexed-seqs "${DEMUX_DIR}/demux.qza" \
+      --i-demultiplexed-seqs "${DEMUX_DIR}/per_sample_sequences.qza" \
       --p-trim-left-f 0 \
       --p-trunc-len-f 230 \
       --p-trim-left-r 0 \
       --p-trunc-len-r 230 \
       --p-n-threads 8 \
       --o-representative-sequences "${DENOISE_DIR}/rep-seqs.qza" \
-      --o-denoising-stats "${DENOISE_DIR}/denoising-stats.txt" \
-      --o-table "${DENOISE_DIR}/table.qza"
+      --o-denoising-stats "${DENOISE_DIR}/denoising-stats.qza" \
+      --o-table "${DENOISE_DIR}/table_main.qza"
+fi
+
+# filter out the samples with no featured from the table
+if [ ! -e "${DENOISE_DIR}/table.qza" ]; then
+    qiime feature-table filter-samples \
+      --i-table "${DENOISE_DIR}/table_main.qza" \
+      --p-min-frequency 1 \
+      --o-filtered-table "${DENOISE_DIR}/table.qza"
 fi
 
 if [[ ! -e  "${DENOISE_DIR}/table.qzv" && -e "${DENOISE_DIR}/table.qza" ]]; then
@@ -168,6 +175,13 @@ if [[ ! -e "${DENOISE_DIR}/table" && -e "${DENOISE_DIR}/table.qza" ]]; then
       --input-path "${DENOISE_DIR}/table.qza" \
       --output-path "${DENOISE_DIR}/table"
 fi
+
+if [[ ! -e "${DENOISE_DIR}/denoising-stats" && -e "${DENOISE_DIR}/denoising-stats.qza" ]]; then
+    qiime tools export \
+	  --input-path "${DENOISE_DIR}/denoising-stats.qza" \
+	  --output-path "${DENOISE_DIR}/denoising-stats"
+fi
+
 
 ###=====================
 ###  TAXONOMIC ANALYSIS
@@ -242,8 +256,6 @@ if [[ ! -e "${METRIC_DIR}/faith" && -e "${METRIC_DIR}/faith_pd_vector.qza" ]]; t
       --output-path "${METRIC_DIR}/faith"
 fi
 
-#Get an error here, something about "Data non-symmetric and/or contains NaNs"
-
 if [ ! -e "${METRIC_DIR}/weighted_unifrac_distance_matrix.qza" ]; then
     qiime diversity beta-phylogenetic \
       --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
@@ -279,7 +291,43 @@ if [ ! -e "${DENOISE_DIR}/table/feature-table.tsv" ]; then
       --to-tsv
 fi
 
+###=====================
+###  ADDITIONAL FIGURES
+###=====================
+
+
+#if [ ! -d "${EXTRAS_DIR}/taxa_barplot" ]; then
+#    qiime taxa barplot \
+#      --i-table "${DENOISE_DIR}/table.qza" \
+#      --i-taxonomy "${DENOISE_DIR}/taxonomy.qza" \
+#      --m-metadata-file ${MAPPING_FP} \
+#      --output-dir "${EXTRAS_DIR}/taxa_barplot"
+#fi
+
+
+#if [ ! -d "${EXTRAS_DIR}/core-metrics-phylogenetic" ]; then
+#qiime diversity core-metrics-phylogenetic \
+#      --p-sampling-depth 1000 \
+#      --i-phylogeny "${DENOISE_DIR}/rooted-tree.qza" \
+#      --i-table "${DENOISE_DIR}/table.qza" \
+#      --m-metadata-file "${MAPPING_FP}" \
+#      --p-n-jobs 8 \
+#      --o-observed-otus-vector "${EXTRAS_DIR}/obs_otus.qza" \
+#      --output-dir "${EXTRAS_DIR}/core-metrics-phylogenetic"
+#fi
+
+#if [ ! -d "${EXTRAS_DIR}/alpha-group-signf-otus" ]; then
+#qiime diversity alpha-group-significance \
+#      --i-alpha-diversity "${EXTRAS_DIR}/obs_otus.qza" \
+#      --m-metadata-file "${MAPPING_FP}" \
+#      --output-dir "${EXTRAS_DIR}/alpha-group-signf-otus"
+#fi
+
+
 echo "****"
 echo "Done!"
 echo "If nothing happened,"
 echo "You may already have result files, check your directories!"
+
+
+

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -x
 set -e
-set -u
+#set -u
 
 if [ $# -ne 3 ]; then
     echo "Usage: $0 DIRECTORY1 DIRECTORY2 DIRECTORY_OUT"
@@ -11,8 +11,6 @@ fi
 DIR1=$1
 DIR2=$2
 DIR_OUT=$3
-
-
 
 DENOISE_DIR="denoising_results"
 METRIC_DIR="${DIR_OUT}/core_metrics_results"
@@ -26,24 +24,21 @@ mkdir -p "${DIR_OUT}/${DENOISE_DIR}"
 ## These can be downloaded from https://data.qiime2.org/2017.9/common/gg-13-8-99-nb-classifier.qza (full length)
 ## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
-
-#CLASSIFIER_FP="/home/tanesc/code/qiime2code/training-feature-classifiers/gg-13-8-99-nb-classifier.qza"
-#CLASSIFIER_FP="${HOME}/gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
+CLASSIFIER_FP="gg-13-8-99-nb-classifier.qza"
+#CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
 #CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
-CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
+
 
 ###===============
 ###  MERGE FILES 
 ###===============
 
-
 #NOtE: if you have duplicate sample-ids you can use a trick here to rename them without running an entire pipeline again:
 #https://forum.qiime2.org/t/change-sample-ids-after-running-dada2/3918/3
 
 qiime feature-table merge \
-      --i-table1 "${DIR1}/${DENOISE_DIR}/table.qza" \
-      --i-table2 "${DIR2}/${DENOISE_DIR}/table.qza" \
+      --i-tables "${DIR1}/${DENOISE_DIR}/table.qza" "${DIR2}/${DENOISE_DIR}/table.qza" \
       --o-merged-table "${DIR_OUT}/${DENOISE_DIR}/table.qza"
 
 
@@ -53,7 +48,7 @@ qiime tools export \
 
 
 qiime feature-table merge-seqs \
-      --i-data "${DIR1}/${DENOISE_DIR}/rep-seqs.qza" --i-data "${DIR2}/${DENOISE_DIR}/rep-seqs.qza" \
+      --i-data "${DIR1}/${DENOISE_DIR}/rep-seqs.qza" "${DIR2}/${DENOISE_DIR}/rep-seqs.qza" \
       --o-merged-data "${DIR_OUT}/${DENOISE_DIR}/rep-seqs.qza"
 
 
@@ -146,4 +141,4 @@ qiime tools export \
 biom convert \
      -i "${DIR_OUT}/${DENOISE_DIR}/table/feature-table.biom" \
      -o "${DIR_OUT}/${DENOISE_DIR}/table/feature-table.tsv" \
-       --to-tsv
+     --to-tsv

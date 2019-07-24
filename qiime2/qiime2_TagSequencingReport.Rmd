@@ -1,6 +1,6 @@
 ---
 title: "Basic Bioinformatics Overview"
-author: "Scott G. Daniel, PennCHOP Microbiome Program"
+author: "PennCHOP Microbiome Program"
 date: \today
 output: 
     pdf_document:
@@ -19,7 +19,7 @@ output:
 ```{r eval=FALSE, include=FALSE}
 #notes
 #neat: you can run this following command in the console to give your reports custom names (or date-stamp them)
-#rmarkdown::render('ronen_stein_Report_shotgun.Rmd',output_file = paste('CEASE.report.', Sys.Date(), '.pdf', sep=''))
+#rmarkdown::render('Report_shotgun.Rmd',output_file = paste('Report.', Sys.Date(), '.pdf', sep=''))
 ```
 <!-- ===== -->
 
@@ -69,11 +69,11 @@ library(tibble)
 #Linear mixed-effects models like repeated measures analysis
 library(lme4)
 #used to read in mothur-formatted files
-library(phangorn)
+#library(phangorn)
 #The phyloseq package seeks to address issues with multiple microbiome analysis packages by providing a set of functions that internally manage the organizing, linking, storing, and analyzing of phylogenetic sequencing data. In general, this package is used for UniFrac analyses.
-library(phyloseq)
+#library(phyloseq)
 #Pretty Venn disgrams
-library(VennDiagram)
+#library(VennDiagram)
 ```
 
 <!-- resources -->
@@ -264,7 +264,7 @@ adf <- split_assignments(ta$trunc_taxon)
 ### remove contamination
 is_mitochondrial <- grepl("mitochondria", adf$Family)
 is_chloroplast <- grepl("Chloroplast", adf$Class)
-is_unassigned <- grepl("Unassigned", adf$Kingdom)
+is_unassigned <- is.na(adf$Phylum)
 is_archaea <- grepl("Archaea", adf$Kingdom)
 is_contam <- is_mitochondrial | is_chloroplast | is_unassigned ### Archaea kept to check positive control samples
 counts <- counts[!is_contam,]
@@ -340,8 +340,7 @@ change_data_format <- function(d) {
 all_dates <- as.character(unique(s$run_start_date))
 run_date <- paste(lapply(all_dates, change_data_format), collapse=', ')
 
-investigator <- paste(unique(s$investigators), collapse = ", ")
-investigator <- ""
+investigator <- paste(unique(s$investigator), collapse = ", ")
 ```
 
 # Introduction
@@ -522,3 +521,12 @@ hc = hclust(dist_in, method="average")
 plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
 ```
 
+\newpage
+
+# APPENDIX: Counts of high quality paired reads for each sample
+```{r}
+s %>% 
+  select(SampleID, Read_Counts, final_library_concentration_ng_ul) %>% 
+  arrange(-Read_Counts) %>% 
+  pander()
+```
