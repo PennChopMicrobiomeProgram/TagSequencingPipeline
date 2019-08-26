@@ -38,7 +38,8 @@ CLASSIFIER_FP="gg-13-8-99-nb-classifier.qza"
 #https://forum.qiime2.org/t/change-sample-ids-after-running-dada2/3918/3
 
 qiime feature-table merge \
-      --i-tables "${DIR1}/${DENOISE_DIR}/table.qza" "${DIR2}/${DENOISE_DIR}/table.qza" \
+      --i-tables "${DIR1}/${DENOISE_DIR}/table.qza" \
+      --i-tables "${DIR2}/${DENOISE_DIR}/table.qza" \
       --o-merged-table "${DIR_OUT}/${DENOISE_DIR}/table.qza"
 
 
@@ -48,7 +49,8 @@ qiime tools export \
 
 
 qiime feature-table merge-seqs \
-      --i-data "${DIR1}/${DENOISE_DIR}/rep-seqs.qza" "${DIR2}/${DENOISE_DIR}/rep-seqs.qza" \
+      --i-data "${DIR1}/${DENOISE_DIR}/rep-seqs.qza" \
+      --i-data "${DIR2}/${DENOISE_DIR}/rep-seqs.qza" \
       --o-merged-data "${DIR_OUT}/${DENOISE_DIR}/rep-seqs.qza"
 
 
