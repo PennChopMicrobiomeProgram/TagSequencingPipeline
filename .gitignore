@@ -3,3 +3,4 @@
 .RData
 temp.bash
 qiime2_TagSequencingReport_files/
+.DS_Store
