@@ -2,10 +2,6 @@
 
 set -x
 set -e
-#set -u
-
-#source ~/.bashrc
-#conda activate qiime2-2018.11
 
 if [ $# -ne 1 ]; then
 	echo "Usage: $0 MAPPING_FP"
@@ -15,7 +11,8 @@ if [ $# -ne 1 ]; then
 fi
 
 MAPPING_FP=$1
-WORK_DIR="$(dirname ${MAPPING_FP})"
+#PRJ_DIR set in run_qiime2.sh
+WORK_DIR="${PRJ_DIR}/Data"
 
 # See https://www.ostricher.com/2014/10/the-right-way-to-get-the-directory-of-a-bash-script/
 SOURCE_REL="${BASH_SOURCE[0]}"
@@ -23,14 +20,19 @@ SOURCE_ABS=$(readlink -f "${SOURCE_REL}")
 SOURCE_DIR=$(dirname "${SOURCE_ABS}")
 
 ### PATH TO Ceylan's CODE TO COMBINE I1 and I2
-INDEX1_INDEX2_COMBINE_SCRIPT="$(dirname ${SOURCE_DIR})/combine_barcodes.py"
+INDEX1_INDEX2_COMBINE_SCRIPT="${SOURCE_DIR}/combine_barcodes.py"
+
+if [ ! -e $INDEX1_INDEX2_COMBINE_SCRIPT ]; then
+    echo "Cant find combine_barcodes script here: $INDEX1_INDEX2_COMBINE_SCRIPT"
+    exit 1
+fi
 
 ## Taxonomy classifier setup. Two classifiers are currently available:
 ## classifiers trained on full length and on 515F/806R region of Greengenes 13_8 99% OTUs
 ## These can be downloaded from https://data.qiime2.org/2017.9/common/gg-13-8-99-nb-classifier.qza (full length)
 ## or https://data.qiime2.org/2017.9/common/gg-13-8-99-515-806-nb-classifier.qza (515F/806R region)
 
-CLASSIFIER_FP="gg-13-8-99-nb-classifier.qza"
+CLASSIFIER_FP="${PRJ_DIR}/gg-13-8-99-nb-classifier.qza"
 #CLASSIFIER_FP="gg-13-8-99-515-806-nb-classifier.qza" ## used for V4 region
 #CLASSIFIER_FP="gg-13-8-99-27-338-nb-classifier.qza" ## trained for V1V2 region truncated at 350 bp
 
