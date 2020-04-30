@@ -9,6 +9,10 @@
 #$ -l m_mem_free=20G
 
 source ~/.bashrc
-conda activate qiime2-2018.11
+conda activate qiime2-2019.4
 
-./qiime2_pipeline.bash Robinson_Run_1_Metadata.tsv
+export PRJ_DIR="/mnt/isilon/microbiome/analysis/danielsg/sehgal_run_6"
+
+export METADATA="${PRJ_DIR}/Data/sehgal_run_6_mapping_file.tsv"
+
+./qiime2_pipeline.bash $METADATA
