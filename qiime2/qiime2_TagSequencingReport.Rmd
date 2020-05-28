@@ -2,6 +2,7 @@
 title: "Basic Bioinformatics Overview"
 author: "PennCHOP Microbiome Program"
 date: \today
+geometry: margin=3cm
 output: 
     pdf_document:
         keep_tex: false
@@ -15,13 +16,11 @@ output:
 <!--   Beginning of Preamble : Preamble seldom requires change                                        -->
 <!-- ================================================================================================ -->
 
-<!-- Notes -->
 ```{r eval=FALSE, include=FALSE}
 #notes
 #neat: you can run this following command in the console to give your reports custom names (or date-stamp them)
-#rmarkdown::render('Report_shotgun.Rmd',output_file = paste('Report.', Sys.Date(), '.pdf', sep=''))
+rmarkdown::render('qiime2_TagSequencingReport.Rmd',output_file = paste(Sys.Date(),'_Basic16SReport.pdf', sep=''))
 ```
-<!-- ===== -->
 
 <!-- knitr setup -->
 ```{r knitr setup, echo=FALSE}
@@ -47,7 +46,8 @@ opts_chunk$set(
 ### ================
 ###   R packages
 ### ================
-#This package will also help us more easily manipulate our data
+#These packages will also help us more easily manipulate our data
+#install.packages(c("dplyr", "magrittr", "qiimer", "pander", "ape", "vegan", "ggplot2", "gplots", "pheatmap", "tidyr", "usedist", "readr", "tibble", "lme4"))
 library(dplyr)
 library(magrittr)
 library(qiimer)
@@ -87,7 +87,7 @@ library(lme4)
 <!-- user defined functions -->
 ```{r user defined functions}
 ### ================
-###   User defined functions
+###   User defined functions (these functions can be defined in R_functions.R and sourced from the above chunk)
 ### ================
 
 filter_low_coverage <- function(props, frac_cutoff=0.6, min_ab=0){
@@ -164,6 +164,11 @@ heatmap_grouped <- function(summed_props, heatmap_s, grps = c("study_group", "st
              fontsize_col = 8, fontsize_row = 8, cluster_cols = FALSE, cluster_rows = FALSE,cellheight = 8, cellwidth = 8)
 }
 
+tidy_lm <- function(lm_test) {
+  mod <- summary(lm_test)
+  data.frame(term  = rownames(mod$coefficients), mod$coefficients, row.names=NULL)
+}
+
 ```
 
 <!-- ================================================================================================ -->
@@ -174,7 +179,7 @@ heatmap_grouped <- function(summed_props, heatmap_s, grps = c("study_group", "st
 <!--   Beginning of Project Specific Items                                                            -->
 <!-- ================================================================================================ -->
 
-```{r}
+```{r constants}
 ### ===========================
 ###   define constants
 ### ===========================
@@ -189,11 +194,11 @@ richness_subsample_size <- 1000
 sample_threshold <- 100
 
 ### setwd
-#fill in your project dir
-root_dir = "/Volumes/microbiome/analysis/[username]/[investigator_project_name]"
+#fill in your project dir (alternatively, you can use the "here" library)
+#root_dir = "/Volumes/microbiome/analysis/[username]/[investigator_project_name]"
 
 ### mapping file path
-mapping_file_fp <- file.path(root_dir, "mapping_file.tsv")
+mapping_file_fp <- list.files(file.path(root_dir, "metadata"), pattern = ".tsv", full.names = TRUE)
 
 ### otu table file path
 feature_table_fp <- file.path(root_dir, "denoising_results", "table", "feature-table.tsv")
@@ -211,18 +216,21 @@ wu_fp <- file.path(root_dir, "core_metrics_results", "wu", "distance-matrix.tsv"
 faith_fp <- file.path(root_dir, "core_metrics_results", "faith", "alpha-diversity.tsv")
 ```
 
-```{r, warning=F}
+```{r read data, warning=F}
 ### ===========================
 ###   read in data
 ### ===========================
 
 ### read mapping file
-s <- read_qiime_mapping_file(mapping_file_fp) 
-
+s <- read_qiime_mapping_file(mapping_file_fp) %>%
+  rename_all(recode, SubjectID = "subject_id", SampleType = "sample_type", HostSpecies = "host_species") %>% ##rename columns
+  filter(rowSums(is.na(.)|.=="") != ncol(.)) #filter out rows with NA's or blanks
+  
 ### check for the column names to assign color_by and shape_by for pcoa plots
 color_by <- NULL
 shape_by <- NULL
-potential_headers <- c("study_group", "SampleType", "study_day", "cage_number")
+potential_headers <- c("study_group", "sample_type", "study_day", "SubjectID",
+                       "current_antibiotics", "host_species", "cage_number") #pick 2
 header_idx = which(is.element(potential_headers, colnames(s)))
 if(length(header_idx)>0) {
   color_by <- potential_headers[header_idx[1]]
@@ -245,7 +253,7 @@ read_counts <- colSums(counts) %>%
 ### find the samples to keep
 s <- merge(s, read_counts, by="SampleID", all.x=T) %>%
   mutate(Keep = Read_Counts > min_reads) %>%
-  mutate(isControl = grepl("geneblock|freewater|extract", SampleID, ignore.case = TRUE))
+  mutate(isControl = grepl('Extract|Vibrio|EBneg|Blank|Mock|DNAfreewater|geneblock', SampleID, ignore.case = TRUE))
 
 #trun_taxon perl expression is to get rid of trailing "; s__" since it doesn't add any new information
 
@@ -295,11 +303,14 @@ summed_props <- sweep(summed_cts, 2, colSums(summed_cts), "/")
 ### possible issue 1: Samples found in the sample sheet but not in the feature table (0 reads)
 s_missing <- s %>%
   filter(!SampleID %in% colnames(counts)) %>%
-  select(SampleID, SampleType, isControl)
+  select(SampleID, sample_type, isControl)
 
 if (any(!s_missing$isControl)) {
   pander(filter(s_missing, !isControl), caption="These samples were in the sample sheet but not in the feature table.")
+  #stop (simpleError("Please fix"))
 }
+
+s[s$SampleID %in% s_missing$SampleID, "Keep"] <- FALSE
 ```
 
 
@@ -309,11 +320,9 @@ in_counts_not_in_s <- setdiff(colnames(counts), s$SampleID)
 if (length(in_counts_not_in_s) > 0) {
   stop (simpleError("These SampleID(s) are in the feature table, but not found in the sample sheet.", paste(in_counts_not_in_s, collapse=" ")))
 }
-
-s[s$SampleID %in% s_missing$SampleID, "Keep"] <- FALSE
 ```
 
-```{r, warning=F}
+```{r calc adiv, warning=F}
 ### ===========================
 ###   calculate / read in alpha diversity
 ### ===========================
@@ -329,16 +338,28 @@ s <- s %>%
   merge(faith, by="SampleID", all.x=T)
 ```
 
-```{r}
+```{r investigator}
 ### ===========================
 ###   extract investigator and run date from the sample sheet
 ### ===========================
 
-change_data_format <- function(d) {
-  paste(substr(d,5,6), substr(d,7,8), substr(d,1,4), sep="-")
+change_date_format <- function(d) { #change date format to MM-DD-YY
+  if(grepl("-", d)) {
+    paste(substr(d,6,7), substr(d,9,10), substr(d,1,4), sep="-")
+  }
+  else if (grepl("/", d)) {
+    gsub("/", "-", d)
+  } 
+  else if (str_length(unique(d)) == 8) {
+    paste(substr(d,5,6), substr(d,7,8), substr(d,1,4), sep="-")
+  }
+  else {
+    stop (simpleError(paste0("Your date ", d, " is not in YYYY-MM-DD, MM/DD/YY, or MMDDYYYY format.")))
+  }
 }
+
 all_dates <- as.character(unique(s$run_start_date))
-run_date <- paste(lapply(all_dates, change_data_format), collapse=', ')
+run_date <- paste(lapply(all_dates, change_date_format), collapse=', ')
 
 investigator <- paste(unique(s$investigator), collapse = ", ")
 ```
@@ -349,9 +370,9 @@ This report is based on the results of sequencing performed on `r run_date` for 
 ## Histogram of high quality paired reads per sample
 The black dashed vertical line shows the minimum number of reads (`r min_reads`) for analysis. Control samples, if any, were included in the histogram.
 
-```{r, fig.width=6, fig.height=4, warning=F}
+```{r histogram, fig.width=6, fig.height=4, warning=F}
 ggplot(s, aes(x=Read_Counts)) +
-    geom_histogram(aes(fill=SampleType), binwidth=1000) +
+    geom_histogram(aes(fill=sample_type), binwidth=1000) +
     geom_vline(xintercept = min_reads, color="black", linetype="dashed") +
     theme_classic() +
     theme_bw() + 
@@ -359,22 +380,23 @@ ggplot(s, aes(x=Read_Counts)) +
     ylab("Number of samples")
 ```
 
+
 \newpage
 
 ## Whole samples that are above the `r min_reads` read count threshold
 
-```{r}
+```{r min reads}
 pander(table(s[, color_by], factor(ifelse(s$Keep, "Keep", "Discard"))))
 ```
 
-\newpage
+\blandscape
 
 # Taxonomic heatmap
 
-```{r}
+```{r heatmap constants}
 prop_cut <- 0.01
 satu_limit <- 0.4
-heatmap_fp <- "otu_heatmap.pdf"
+heatmap_fp <- file.path(root_dir, "otu_heatmap.pdf")
 show.text <- sum(s$Keep) > sample_threshold
 ```
 
@@ -384,7 +406,7 @@ The chart is colored white if taxa were not observed in the sample, dark blue if
 
 `r if(show.text){paste0("Please see attached plot ", heatmap_fp, ".")}`
 
-```{r, fig.height=12, fig.width=16}
+```{r heatmap, fig.height=12, fig.width=16}
 s_toPlot <- s %>%
   filter(Keep)
 
@@ -400,6 +422,68 @@ if (dim(s_toPlot)[1] > sample_threshold) {
 
 ```
 
+\elandscape
+
+# Possible contaminants
+
+```{r contaminants, fig.height=9}
+
+grps <- c(color_by, shape_by)
+
+cols_to_keep <- s[s$Keep & !s$isControl,"SampleID"]
+rows_to_keep <- apply(summed_props[, cols_to_keep],1,max) >= prop_cut 
+
+props_toPlot <- summed_props[rows_to_keep,cols_to_keep] %>%
+  as.data.frame() %>%
+  rownames_to_column(var = "Taxa") %>%
+  pivot_longer(cols = cols_to_keep, names_to = "SampleID", values_to = "Prop") %>%
+  merge(s, by="SampleID") %>%
+  mutate(Taxa = sub(" ", "\n", Taxa)) %>%
+  mutate(Taxa = gsub("[pcofgs]__", "", Taxa)) %>%
+  mutate(Taxa = reorder(Taxa, -Prop)) %>%
+  mutate(DNA_concentration = library_concentration_ng_ul)
+  
+props_toPlot %>%
+  ggplot(aes(x=DNA_concentration, y=Prop)) +
+    geom_point(aes(color = sample_type)) +
+    geom_smooth(method = "lm") +
+    theme_bw() +
+    theme(axis.text.y=element_text(size=5),
+      strip.background = element_blank()) +
+    scale_color_brewer(palette = "Set2") +
+    scale_y_continuous(trans = "logit") +
+    facet_wrap(~Taxa, scales="free_y", ncol=3) +
+    labs(x="DNA_concentration (ng/uL)", color="SampleType",
+         y="Relative abundance",
+         title = paste("Scatterplot of DNA concentration vs. Taxa abundance"))
+
+```
+
+```{r possible contaminants}
+
+contam_Taxa <- props_toPlot %>%
+  mutate(Prop = Prop + min(filter(., Prop>0)$Prop) / 10) %>%
+  mutate(props_logit = log(Prop/(1-Prop))) %>%
+  group_by(Taxa) %>%
+  do(tidy_lm(lm(props_logit ~ DNA_concentration, data=., na.action=na.omit))) %>%
+  setNames(c("Taxa","term","Estimate","Std.Error","t.value","p.value")) %>%
+  ungroup() %>%
+  filter(term != '(Intercept)') %>%
+  filter(Estimate < 0) %>%
+  group_by(term) %>%
+  mutate(fdr = p.adjust(p.value, method="BH")) %>%
+  ungroup() %>%
+  filter(p.value < 0.05)
+
+if (nrow(contam_Taxa) == 0) {
+  cat('No significant contaminating Taxa were found.')
+} else {
+  contam_Taxa %>%
+    pander(caption="These Taxa were negatively associated with DNA concentration (p < 0.05)")
+}
+
+```
+
 \newpage
 
 # Alpha Diversity
@@ -408,10 +492,10 @@ Alpha diversity was assessd by the expected number of observed OTUs (out of rare
 
 ## Number of observed OTUs
 
-```{r, fig.height=2.5}
+```{r richness, fig.height=2.5}
 alpha_measure <- "richness"
 
-s %>% filter(Keep) %>%
+s %>% filter(Keep & !isControl) %>%
   ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
   geom_boxplot() +
   labs(y=alpha_measure, x=color_by, color=color_by) +
@@ -423,10 +507,10 @@ s %>% filter(Keep) %>%
 
 ## Shannon Index
 
-```{r, fig.height=2.5}
+```{r shannon, fig.height=2.5}
 alpha_measure <- "shannon"
 
-s %>% filter(Keep) %>%
+s %>% filter(Keep & !isControl) %>%
   ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
   geom_boxplot() +
   labs(y=alpha_measure, x=color_by, color=color_by) +
@@ -438,10 +522,10 @@ s %>% filter(Keep) %>%
 
 ## Faith’s Phylogenetic Diversity
 
-```{r, fig.height=2.5}
+```{r faith pd, fig.height=2.5}
 alpha_measure <- "faith_pd"
 
-s %>% filter(Keep) %>%
+s %>% filter(Keep & !isControl) %>%
   ggplot(aes(x=eval(parse(text=color_by)), y=eval(parse(text=alpha_measure)), color=eval(parse(text=color_by)))) +
   geom_boxplot() +
   labs(y=alpha_measure, x=color_by, color=color_by) +
@@ -459,7 +543,7 @@ Similarity between samples was assessed by unweighted and weighted UniFrac dista
 
 ## Unweighted UniFrac distances
 
-```{r}
+```{r uu import}
 dist_fp <- uu_fp
 dist_name <- "unweighted UniFrac distances"
 ```
@@ -468,7 +552,7 @@ The `r dist_name` was employed to compare the species composition of the samples
 
 ### PCoA plot
 
-```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
+```{r uu pcoa, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
 s_toPlot <- s %>%
   filter(Keep) %>%
   filter(!isControl)
@@ -479,20 +563,9 @@ plot(make_pcoa_plot(dist_in, s_toPlot, color_by=color_by, shape_by=NULL))
 
 \newpage
 
-### UPGMA clustering 
-
-The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
-
-```{r, fig.width=12, fig.height=5, echo=FALSE}
-hc = hclust(dist_in, method="average")
-plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
-```
-
-\newpage
-
 ## Weighted UniFrac distances
 
-```{r}
+```{r wu import}
 dist_fp <- wu_fp
 dist_name <- "weighted UniFrac distances"
 ```
@@ -501,7 +574,7 @@ The `r dist_name` was employed to compare the species composition of the samples
 
 ### PCoA plot
 
-```{r, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
+```{r wu pcoa, fig.width=6, fig.height=5, echo=FALSE, warning=FALSE}
 s_toPlot <- s %>%
   filter(Keep) %>%
   filter(!isControl)
@@ -512,21 +585,13 @@ plot(make_pcoa_plot(dist_in, s_toPlot, color_by=color_by, shape_by=NULL))
 
 \newpage
 
-### UPGMA clustering 
-
-The following plot shows sample clustering based on `r dist_name`. We have used a method of hierarchical clustering called "average-linkage" or UPGMA. At the bottom of the dendrogram, all samples start out in their own group. Moving up the dendrogram, samples accumulate into clusters if the average (mean) distance between all samples is below the indicated value.
-
-```{r, fig.width=12, fig.height=5, echo=FALSE}
-hc = hclust(dist_in, method="average")
-plot(hc, main=paste0("UPGMA linkage clustergram based on\n", dist_name), xlab="", ylab="distance", sub = "")
-```
-
-\newpage
-
 # APPENDIX: Counts of high quality paired reads for each sample
 ```{r}
 s %>% 
-  select(SampleID, Read_Counts, final_library_concentration_ng_ul) %>% 
+  select(SampleID, Read_Counts, library_concentration_ng_ul, Keep) %>%
+  rename(library_ng_ul = "library_concentration_ng_ul") %>%
   arrange(-Read_Counts) %>% 
   pander()
 ```
+
+
