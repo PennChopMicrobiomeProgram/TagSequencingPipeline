@@ -11,7 +11,6 @@ output:
         includes:
             in_header: ~/TeX_packages_commands.sty
 ---
-\tableofcontents
 
 <!-- ================================================================================================ -->
 <!--   Beginning of Preamble : Preamble seldom requires change                                        -->
